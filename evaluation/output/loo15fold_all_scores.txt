@@ -1,0 +1,17 @@
+fold 0  gaze_error: 2.1803  gaze_error_std: 1.5981
+fold 1  gaze_error: 5.0639  gaze_error_std: 2.0267
+fold 2  gaze_error: 6.0772  gaze_error_std: 1.8790
+fold 3  gaze_error: 6.0962  gaze_error_std: 2.8814
+fold 4  gaze_error: 2.5950  gaze_error_std: 1.5120
+fold 5  gaze_error: 4.2995  gaze_error_std: 1.5820
+fold 6  gaze_error: 3.5474  gaze_error_std: 1.8238
+fold 7  gaze_error: 4.4431  gaze_error_std: 2.8097
+fold 8  gaze_error: 4.6191  gaze_error_std: 3.3562
+fold 9  gaze_error: 4.3794  gaze_error_std: 2.1072
+fold10  gaze_error: 6.0441  gaze_error_std: 2.8400
+fold11  gaze_error: 4.5815  gaze_error_std: 2.0554
+fold12  gaze_error: 4.5804  gaze_error_std: 2.7115
+fold13  gaze_error: 4.6918  gaze_error_std: 2.6353
+fold14  gaze_error: 8.0199  gaze_error_std: 2.0705
+
+mean    gaze_error: 4.7479

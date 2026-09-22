@@ -1,0 +1,13 @@
+torch>=2.14
+torchvision
+numpy
+h5py
+PyYAML
+tensorboard
+
+opencv-python
+dlib
+facenet-pytorch
+imutils
+scipy
+open3d

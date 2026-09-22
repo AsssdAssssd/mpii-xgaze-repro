@@ -1,0 +1,23 @@
+experiment:
+  name: MPII_LOO_repro_fold00
+  root: ./exp/{name}
+  data_dir: "/home/zhongrui/datasets/mpii2mpii_loo"
+  use_gpu: true
+  batch_size: 50
+  num_workers: 5
+
+train:
+  backbone: resnet50 #'resnet18''resnet34''resnet50''resnet101''resnet152''resnext50_32x4d' 'resnext101_32x8d''wide_resnet50_2''wide_resnet101_2':
+  print_freq: 1000
+  epochs: 25
+  init_lr: 0.0001
+  lr_patience: 10
+  lr_decay_factor: 0.1
+
+test:
+  pre_trained_model_path: "{root}/train/weights/epoch_{epochs}_ckpt.pth.tar"
+  is_eval: True
+  eval_label: "/home/zhongrui/code/mpii_xgaze_repro/evaluation/ref/reference_within/ori_mpii_label_keyed.txt"
+
+  
+  
