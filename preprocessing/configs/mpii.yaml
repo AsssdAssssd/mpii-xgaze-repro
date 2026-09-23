@@ -1,0 +1,38 @@
+# MPIIFaceGaze preprocessing config (entry: preprocessing/run_mpii.py)
+#
+# paths   : every input/output location (model files included)
+# filter  : quality / quantity filters; `enable: false` turns them all off
+# options : optional outputs and behaviour switches
+# runtime : execution knobs
+
+paths:
+  # raw MPIIFaceGaze root, layout <input_root>/<subj>/day*/*.jpg
+  input_root: /home/zhongrui/datasets/MPIIFaceGaze
+  # null -> <parent of input_root>/<INPUT_ROOT uppercase>_normalize_output
+  output_root: null
+  # 50-point 3D face model; 6 PnP points are selected via FM50_USE
+  face_model: configs/face_model/xgaze_face_model.txt
+  face_detector: modules/mmod_human_face_detector.dat
+  landmark_predictor: modules/shape_predictor_68_face_landmarks.dat
+
+filter:
+  enable: true           # false -> ignore min_face / max_reproj
+  min_face: 40           # drop faces with bbox min side < this (px)
+  max_reproj: 8.0        # drop samples with PnP reprojection error > this (px)
+  gpu_conf: 0.5          # MTCNN confidence threshold
+  limit: 0               # max images per subject, 0 = all
+  skip_undistort: false  # ignore camera distortion in PnP
+
+options:
+  detector: gpu          # gpu (MTCNN on CUDA) | cnn (dlib, CPU)
+  upsample: 1            # dlib cnn detector upsample
+  save_landmarks: true   # write landmarks/<subj>.csv
+  rotated_mesh_vis: true # write rotated_mesh_vis/<key>.txt
+  viz_per_subject: 4     # montage tiles per subject, 0 = off
+  overwrite: false       # recompute when output already exists
+
+runtime:
+  subjects: ""           # comma list, empty = p00..p14
+  workers: 8
+  gpu_batch: 32
+  print_freq: 50

@@ -87,14 +87,13 @@ class Trainer(object):
             train_acc, loss_gaze = \
                 self.train_one_epoch(epoch, self.train_loader)
 
-            # save the model for each epoch
-            add_file_name = 'epoch_' + str(epoch)
+            # keep only the latest checkpoint (overwrite each epoch)
             self.save_checkpoint(
                 {'epoch': epoch + 1,
                  'model_state': self.model.state_dict(),
                  'optim_state': self.optimizer.state_dict(),
                  'scheule_state': self.scheduler.state_dict()
-                 }, add=add_file_name
+                 }
             )
             self.scheduler.step()  # update learning rate
 
@@ -142,7 +141,7 @@ class Trainer(object):
                 # print('Current batch running time is ', np.round(batch_time.avg / 60.0), ' mins')
                 tic = time.time()
                 # estimate the finish time
-                est_time = (self.epochs - epoch) * (self.num_train / self.batch_size) * batch_time.avg / 60.0
+                est_time = (self.epochs - epoch) * (self.num_train / self.batch_size) * (batch_time.avg /self.print_freq)/ 60.0
                 print('Estimated training time left: ', np.round(est_time), ' mins')
 
                 self.writer.add_scalar('Error/train', errors.avg, self.train_iter)
@@ -251,14 +250,11 @@ class Trainer(object):
         print('gaze_error: ', error)
         print('gaze_error_std: ', error_std)
 
-    def save_checkpoint(self, state, add=None):
+    def save_checkpoint(self, state):
         """
-        Save a copy of the model
+        Save the latest copy of the model (overwrites the previous epoch).
         """
-        if add is not None:
-            filename = add + '_ckpt.pth.tar'
-        else:
-            filename ='ckpt.pth.tar'
+        filename = 'last_ckpt.pth.tar'
         ckpt_path = os.path.join(self.ckpt_dir, filename)
         torch.save(state, ckpt_path)
 
