@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import shutil
 
@@ -25,7 +26,46 @@ def load_config(config_path, mode):
     else:
         os.makedirs(os.path.join(mode_dir, "output"), exist_ok=True)
 
-    shutil.copy(config_path, os.path.join(project_root, "config.yaml"))
+    archived = os.path.join(project_root, "config.yaml")
+
+    # keep datasets recorded by a previous run of the other mode
+    prev = {}
+    if os.path.isfile(archived):
+        try:
+            with open(archived) as f:
+                prev = yaml.safe_load(f) or {}
+        except yaml.YAMLError:
+            prev = {}
+
+    shutil.copy(config_path, archived)
+
+    # record which datasets this run used; the loaders read <data_dir>/train_test_split.json
+    mode_key = "test" if mode == "test" else "train"
+    split_path = os.path.join(config["experiment"]["data_dir"], "train_test_split.json")
+    recorded = {k: prev[k] for k in
+                ("train_split", "train_datasets", "test_split", "test_datasets")
+                if k in prev}
+    if os.path.isfile(split_path):
+        with open(split_path) as f:
+            split = json.load(f)
+        recorded[f"{mode_key}_split"] = split_path
+        recorded[f"{mode_key}_datasets"] = split.get(mode_key, [])
+        print(f"recorded {mode_key}_datasets: "
+              f"{len(recorded[f'{mode_key}_datasets'])} entries")
+    else:
+        print("[warn] split file not found, not recorded:", split_path)
+
+    with open(archived, "a") as f:
+        f.write("\n# datasets\n")
+        for k in ("train_split", "train_datasets", "test_split", "test_datasets"):
+            if k not in recorded:
+                continue
+            if k.endswith("_split"):
+                f.write(f"{k}: {recorded[k]}\n")
+            else:
+                f.write(f"{k}:\n")
+                for n in recorded[k]:
+                    f.write(f"- {n}\n")
 
     return config
 

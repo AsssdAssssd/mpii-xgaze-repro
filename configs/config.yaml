@@ -1,7 +1,7 @@
 experiment:
-  name: xgaze_80
+  name: xgaze2mpii
   root: ./exp/{name}
-  data_dir: "/home/zhongrui/datasets/xgaze_224"
+  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalize_output"
   use_gpu: true
   batch_size: 50
   num_workers: 5
@@ -15,9 +15,9 @@ train:
   lr_decay_factor: 0.1
 
 test:
-  pre_trained_model_path: "{root}/train/weights/last_ckpt.pth.tar"
+  pre_trained_model_path: "/home/zhongrui/code/mpii_xgaze_repro/exp/xgaze_80/train/weights/last_ckpt.pth.tar"
   is_eval: True
-  eval_label: "/home/zhongrui/code/mpii_xgaze_repro/evaluation/ref/reference_within/ori_xgaze_label_keyed.txt"
+  eval_label: "/home/zhongrui/code/mpii_xgaze_repro/evaluation/ref/reference_within/ori_mpii_label_keyed.txt"
 
   
   
