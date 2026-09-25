@@ -5,7 +5,7 @@ import os
 import cv2
 import numpy as np
 
-from pnp import ROI, gaze_to_2d  # noqa: F401  (kept for callers)
+from core.pnp import ROI, gaze_to_2d  # noqa: F401  (kept for callers)
 
 
 def make_face_tile(patch, lm_warped, gaze2d):

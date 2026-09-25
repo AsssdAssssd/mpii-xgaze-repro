@@ -14,7 +14,7 @@ import os
 import h5py
 import numpy as np
 
-from pnp import ROI
+from core.pnp import ROI
 
 LANDMARK_HEADER = ["path"] + [f"x{i:02d}" for i in range(68)] + \
     [f"y{i:02d}" for i in range(68)]

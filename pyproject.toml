@@ -1,0 +1,25 @@
+[project]
+name = "mpii_xgaze_repro"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "AsssdAsssd", email = "2362023813@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dlib>=20.0.1",
+    "facenet-pytorch>=2.5.3",
+    "h5py>=3.16.0",
+    "imutils>=0.5.4",
+    "numpy>=2.5.3",
+    "open3d>=0.20.0",
+    "opencv-python>=5.0.0.93",
+    "pyyaml>=6.0.3",
+    "scipy>=1.18.1",
+    "tensorboard>=2.21.0",
+    "torch>=2.14",
+    "torchvision>=0.29.0",
+]
+
+

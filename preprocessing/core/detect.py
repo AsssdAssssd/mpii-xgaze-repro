@@ -107,7 +107,7 @@ def run_gpu(files, mtcnn, pool, gpu_batch, gpu_conf, print_freq):
                 imgs.append(im)
                 valid.append(p)
 
-        boxes_per_img = probs_per_img = None
+        boxes_per_img, probs_per_img = None
         if imgs:
             rgb = [cv2.cvtColor(im, cv2.COLOR_BGR2RGB) for im in imgs]
             try:

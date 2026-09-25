@@ -1,7 +1,7 @@
 """Generic detect -> PnP -> h5 pipeline, driven by a dataset adapter.
 
 A dataset adapter only has to provide subjects() and samples(subj); see
-preprocessing/datasets/mpii.py for the expected sample dict:
+preprocessing/dataset_struct/mpii.py for the expected sample dict:
 
   {
     "key":        "p00/day01/0005"        # used for output naming
@@ -20,15 +20,14 @@ import time
 import cv2
 import numpy as np
 
-import common
-import detect as detect_mod
-import pnp
-import viz
-from writers import H5Writer, write_failed, write_landmarks_csv
+from core import detect as detect_mod
+from core import loader, pnp
+from core import preview as viz
+from core.writers import H5Writer, write_failed, write_landmarks_csv
 
 
 def _load_face_model(cfg):
-    path = common.resolve_path(cfg["paths"]["face_model"])
+    path = loader.resolve_path(cfg["paths"]["face_model"])
     full = np.loadtxt(path).astype(np.float64)
     return pnp.select_face_points(full), full
 
@@ -38,8 +37,8 @@ def _make_detector(cfg):
     mode = opt.get("detector", "gpu")
     workers = rt.get("workers", 8) or 1
     initargs = (mode, opt.get("upsample", 1), flt.get("min_face", 40),
-                common.resolve_path(cfg["paths"]["face_detector"]),
-                common.resolve_path(cfg["paths"]["landmark_predictor"]))
+                loader.resolve_path(cfg["paths"]["face_detector"]),
+                loader.resolve_path(cfg["paths"]["landmark_predictor"]))
     pool = mp.Pool(workers, initializer=detect_mod.worker_init, initargs=initargs)
 
     mtcnn = None
@@ -63,7 +62,7 @@ def _detect(mode, files, pool, mtcnn, cfg):
 
 
 def run(cfg, dataset):
-    in_root, dirs = common.output_layout(cfg)
+    in_root, dirs = loader.output_layout(cfg)
     opt, flt, rt = cfg["options"], cfg["filter"], cfg["runtime"]
 
     need_mesh = bool(opt.get("rotated_mesh_vis", False))
@@ -74,7 +73,7 @@ def run(cfg, dataset):
         keys.append("rotated_mesh_vis")
     if need_viz:
         keys.append("viz")
-    common.ensure_dirs(dirs, keys=keys)
+    loader.ensure_dirs(dirs, keys=keys)
 
     face_model, face_model_full = _load_face_model(cfg)
 

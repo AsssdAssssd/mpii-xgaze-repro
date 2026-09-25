@@ -7,11 +7,10 @@
 import argparse
 import os
 
-import common
-import pipeline
-from datasets.mpii import MPIIFaceGaze
+from core import loader, pipeline
+from dataset_struct.mpii import MPIIFaceGaze
 
-DEFAULT_CONFIG = os.path.join(common.CONFIG_DIR, "mpii.yaml")
+DEFAULT_CONFIG = os.path.join(loader.CONFIG_DIR, "mpii.yaml")
 
 
 def main():
@@ -21,7 +20,7 @@ def main():
     p.add_argument("--limit", type=int, default=None, help="override filter.limit")
     args = p.parse_args()
 
-    cfg = common.load_config(args.config)
+    cfg = loader.load_config(args.config)
     if args.subjects is not None:
         cfg["runtime"]["subjects"] = args.subjects
     if args.limit is not None:

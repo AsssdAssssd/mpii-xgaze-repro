@@ -25,10 +25,10 @@ filter:
 
 options:
   detector: gpu          # gpu (MTCNN on CUDA) | cnn (dlib, CPU)
-  upsample: 1            # dlib cnn detector upsample
+  upsample: 1            # dlib cnn detector 放大倍数
   save_landmarks: true   # write landmarks/<subj>.csv
-  rotated_mesh_vis: true # write rotated_mesh_vis/<key>.txt
-  viz_per_subject: 4     # montage tiles per subject, 0 = off
+  rotated_mesh_vis: False # write rotated_mesh_vis/<key>.txt
+  viz_per_subject: 0     # montage tiles per subject, 0 = off
   overwrite: false       # recompute when output already exists
 
 runtime:

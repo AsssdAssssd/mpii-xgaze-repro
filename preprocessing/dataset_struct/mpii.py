@@ -14,7 +14,7 @@ import os
 
 import numpy as np
 
-import common
+from core import loader
 
 
 def load_camera(subj_dir):
@@ -29,8 +29,8 @@ class MPIIFaceGaze:
     name = "mpii"
 
     def __init__(self, cfg):
-        self.root = common.resolve_path(cfg["paths"]["input_root"])
-        self.subjects_list = common.subjects_from(cfg)
+        self.root = loader.resolve_path(cfg["paths"]["input_root"])
+        self.subjects_list = loader.subjects_from(cfg)
 
     def subjects(self):
         return self.subjects_list

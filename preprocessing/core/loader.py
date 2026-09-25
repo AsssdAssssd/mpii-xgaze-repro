@@ -9,8 +9,13 @@ import os
 
 import yaml
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# loader.py -> core/ -> preprocessing/ -> repo root
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+FILE_PATH = Path(__file__)
+REPO_ROOT = FILE_PATH.parent().patrnt().parent()
 CONFIG_DIR = os.path.join(REPO_ROOT, "preprocessing", "configs")
+CONFIG_DIR = REPO_ROOT / "preprocessing" / "configs"
 
 # output sub-directories created under the output root
 OUTPUT_SUBDIRS = (
