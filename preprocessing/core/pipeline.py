@@ -8,16 +8,14 @@ Any dataset adapter (see preprocessing/dataset_struct/) yields sample dicts:
     "camera":     (3,3) matrix
     "distortion": (n,1)
     "gaze_dir":   (3,) target3d - person3d, camera coordinates
-    "landmarks":  optional (68,2) if the dataset ships them
   }
 
-The image is plain pixel data, not a path: a file-based dataset decodes in its
-adapter, a video/array dataset can hand over frames or tensors directly.
 """
 
 import itertools
 import time
 from pathlib import Path
+import cv2
 
 import dlib
 import numpy as np
@@ -43,22 +41,23 @@ def run(cfg, dataset):
 
     out_root = paths.get("output_root")
     if out_root:
-        out_root = Path(out_root).expanduser()
+        out_root = Path(out_root).resolve()
     else:
-        in_root = Path(paths["input_root"]).expanduser()
-        out_root = in_root.parent/(in_root.name.upper() + "_normalize_output")
+        in_root = Path(paths["input_root"]).resolve()
+        out_root = in_root.parent/(in_root.name.upper() + "_normalized")
     dirs = {name: out_root/name for name in OUTPUT_SUBDIRS}
     for d in dirs.values():
-        d.mkdir(parents=True, exist_ok=True)
+        d.mkdir(parents=True, exist_ok=True)#这不是有问题吗，，有些不是有开关吗
 
-    face_model_full = np.loadtxt(Path(paths["face_model"]).expanduser()).astype(np.float64)
+    ###get config
+    face_model_full = np.loadtxt(Path(paths["face_model"]).resolve()).astype(np.float64)
     face_model = face_model_full[pnp.FM50_USE]
 
     filters_on = flt.get("enable", True)
     max_reproj = flt.get("max_reproj", 0) or 0
     skip_undistort = flt.get("skip_undistort", False)
     min_face = flt.get("min_face", 40)
-    gpu_conf = flt.get("gpu_conf", 0.5)
+    conf = flt.get("conf", 0.5)
 
     overwrite = opt.get("overwrite", False)
     save_lm = opt.get("save_landmarks", True)
@@ -104,7 +103,7 @@ def run(cfg, dataset):
             to_detect = [s for s in batch
                          if s["image"] is not None and s.get("landmarks") is None]
             boxes = detect_mod.detect_faces(
-                [s["image"] for s in to_detect], mtcnn, gpu_conf) if to_detect else []
+                [s["image"] for s in to_detect], mtcnn, conf) if to_detect else []
             box_of = {id(s): b for s, b in zip(to_detect, boxes)}
 
             for s in batch:
@@ -143,8 +142,13 @@ def run(cfg, dataset):
                 warped, hr_norm, _, R, lm_warped = pnp.normalize_face(
                     img, face_model, pts, rvec, tvec, camera)
                 gdir = R @ np.asarray(s["gaze_dir"], dtype=np.float64).reshape(3)
-                gaze2d = pnp.gaze_to_2d(gdir)
-                head2d = pnp.head_to_2d(hr_norm)
+                n = gdir / np.linalg.norm(gdir)
+                gaze2d = np.array([np.arcsin(-n[1]), np.arctan2(-n[0], -n[2])])
+                        
+                M = cv2.Rodrigues(hr_norm.reshape(1, 3))[0]
+                Zv = M[:, 2]
+                head2d = np.array([np.arcsin(Zv[1]), np.arctan2(Zv[0], Zv[2])])
+
                 writer.add(warped, gaze2d, head2d, R, lm_warped)
 
                 if need_viz and writer.n <= viz_n:

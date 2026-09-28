@@ -1,16 +1,8 @@
-# MPIIFaceGaze preprocessing config (entry: preprocessing/run.py --dataset_type mpii)
-#
-# paths   : every input/output location (model files included)
-# filter  : quality / quantity filters; `enable: false` turns them all off
-# options : optional outputs and behaviour switches
-# runtime : execution knobs
-
 paths:
-  # raw MPIIFaceGaze root, layout <input_root>/<subj>/day*/*.jpg
+  # <input_root>/<subj>/day*/*.jpg
   input_root: /home/zhongrui/datasets/MPIIFaceGaze
-  # null -> <parent of input_root>/<INPUT_ROOT uppercase>_normalize_output
+  # null -> <parent of input_root>/<INPUT_ROOT uppercase>_normalized
   output_root: null
-  # 50-point 3D face model; 6 PnP points are selected via FM50_USE
   face_model: configs/face_model/xgaze_face_model.txt
   landmark_predictor: modules/shape_predictor_68_face_landmarks.dat
 
@@ -18,7 +10,7 @@ filter:
   enable: true           # false -> ignore min_face / max_reproj
   min_face: 40           # drop faces with bbox min side < this (px)
   max_reproj: 8.0        # drop samples with PnP reprojection error > this (px)
-  gpu_conf: 0.5          # MTCNN confidence threshold
+  conf: 0.5          # MTCNN confidence threshold
   skip_undistort: false  # ignore camera distortion in PnP
 
 options:

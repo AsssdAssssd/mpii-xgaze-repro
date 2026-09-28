@@ -110,7 +110,7 @@ def run(config,is_train):
 
         trainer = Trainer(config, data_loader, False)
         trainer.test()
-        trainer.evaluation()
+        trainer.evaluation(True)
 
 
 def process_loo_eval_results(eval_result, keys,root,name):
@@ -149,19 +149,19 @@ def run_loo(config,is_train):
         train_data_loaders,test_data_loaders,full_test_loader,keys=get_loo_loader(data_dir, batch_size, **kwargs)
         eval_result={}
         for i in range(len(train_data_loaders)):
-            config["experiment"]["root"]=ori_root+f"/fold_{i}"
-            for sub in ("train/weights", "train/logs", "test/output"):
-                Path(ori_root+f"/fold_{i}", sub).mkdir(parents=True, exist_ok=True)
+            config["experiment"]["root"]=ori_root+"/train"+f"/fold_{i}"
+            for sub in ("train/weights", "train/logs","test/output"):
+                Path(ori_root+"/train"+f"/fold_{i}", sub).mkdir(parents=True, exist_ok=True)
             trainer = Trainer(config, train_data_loaders[i], True)
             trainer.train()
             config["test"]["pre_trained_model_path"] = str(
                 Path(config["experiment"]["root"])/"train"/"weights"/"last_ckpt.pth.tar")
             tester = Trainer(config, test_data_loaders[i], False)
             tester.test()
-            error,error_std=tester.evaluation(True)
+            error,error_std=tester.evaluation(False)
             eval_result[f"fold_{i}"] = (error, error_std)
-        config["experiment"]["root"]=ori_root+"/full"
-        for sub in ("train/weights", "train/logs", "test/output"):
+        config["experiment"]["root"]=ori_root+"/train"+"/full"
+        for sub in ("train/weights", "train/logs","test/output"):
             Path(ori_root+"/full", sub).mkdir(parents=True, exist_ok=True)
         full_trainer = Trainer(config, full_test_loader, True)
         full_trainer.train()
@@ -175,7 +175,7 @@ def run_loo(config,is_train):
 
         out_root = Path(ori_root)/"test"/f"{test_dir.name}_test_result"
         out_root.mkdir(parents=True, exist_ok=True)
-        trained_dir = sorted([i for i in Path(ori_root).iterdir()
+        trained_dir = sorted([i for i in (Path(ori_root)/"train").iterdir()
                               if i.is_dir() and (i.name.startswith("fold_") or i.name=="full")])
         eval_result={}
         for i in trained_dir:

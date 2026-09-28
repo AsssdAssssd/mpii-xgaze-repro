@@ -1,7 +1,7 @@
 experiment:
   name: MPII_LOO
   root: ./exp/{name}
-  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalize_output/normalized_dataset"
+  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalized/normalized_dataset"
   batch_size: 50
   num_workers: 5
 

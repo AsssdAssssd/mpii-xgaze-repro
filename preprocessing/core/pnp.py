@@ -84,13 +84,3 @@ def normalize_face(image, face_model6, landmarks68, rvec, tvec, camera):
 
     return img_warped, hr_norm, face_center, R, lm_warped
 
-
-def gaze_to_2d(gvec):
-    n = gvec / np.linalg.norm(gvec)
-    return np.array([np.arcsin(-n[1]), np.arctan2(-n[0], -n[2])])
-
-
-def head_to_2d(hr_norm):
-    M = cv2.Rodrigues(hr_norm.reshape(1, 3))[0]
-    Zv = M[:, 2]
-    return np.array([np.arcsin(Zv[1]), np.arctan2(Zv[0], Zv[2])])
