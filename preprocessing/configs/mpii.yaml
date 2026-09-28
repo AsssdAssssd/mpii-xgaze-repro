@@ -1,4 +1,4 @@
-# MPIIFaceGaze preprocessing config (entry: preprocessing/run_mpii.py)
+# MPIIFaceGaze preprocessing config (entry: preprocessing/run.py --dataset_type mpii)
 #
 # paths   : every input/output location (model files included)
 # filter  : quality / quantity filters; `enable: false` turns them all off
@@ -19,7 +19,6 @@ filter:
   min_face: 40           # drop faces with bbox min side < this (px)
   max_reproj: 8.0        # drop samples with PnP reprojection error > this (px)
   gpu_conf: 0.5          # MTCNN confidence threshold
-  limit: 0               # max images per subject, 0 = all
   skip_undistort: false  # ignore camera distortion in PnP
 
 options:
@@ -30,6 +29,5 @@ options:
 
 runtime:
   subjects: ""           # comma list, empty = p00..p14
-  workers: 8
   gpu_batch: 32
   print_freq: 50

@@ -1,20 +1,20 @@
 experiment:
-  name: xgaze2mpii
+  name: MPII_LOO
   root: ./exp/{name}
-  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalize_output"
+  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalize_output/normalized_dataset"
   batch_size: 50
   num_workers: 5
 
 train:
   backbone: resnet50 #'resnet18''resnet34''resnet50''resnet101''resnet152''resnext50_32x4d' 'resnext101_32x8d''wide_resnet50_2''wide_resnet101_2':
   print_freq: 1000
-  epochs: 25
+  epochs: 1
   init_lr: 0.0001
   lr_patience: 10
   lr_decay_factor: 0.1
 
 test:
-  pretrained_expname: xgaze2mpii
+  pretrained_expname: MPII_LOO
   test_dataset: "/home/zhongrui/datasets/xgaze_224" #含有test_train_split的数据集，用其中的test测试
 
   

@@ -19,10 +19,6 @@ DIST_NORM = 600
 ROI = (224, 224)
 
 
-def select_face_points(face_model_full):
-    return np.asarray(face_model_full, dtype=np.float64)[FM50_USE]
-
-
 def estimate_head_pose(landmarks6, face_model6, camera, distortion):
     """Return (rvec, tvec, reproj(6,2), mean_reproj_err) or (None,)*4."""
     ret, rvec, tvec = cv2.solvePnP(

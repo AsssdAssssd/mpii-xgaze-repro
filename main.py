@@ -116,7 +116,7 @@ def run(config,is_train):
 def process_loo_eval_results(eval_result, keys,root,name):
 
     eval_file = Path(root) / f"{name}.txt"
-    loo_keys = [k for k in eval_result if k.startswith("loo_")]
+    loo_keys = [k for k in eval_result if k.startswith("fold_")]
     with open(eval_file, "w") as f:
         f.write("Leave-One-Out Evaluation Results:\n")
         for i, (model,(error,error_std)) in enumerate(eval_result.items()):
@@ -149,15 +149,17 @@ def run_loo(config,is_train):
         train_data_loaders,test_data_loaders,full_test_loader,keys=get_loo_loader(data_dir, batch_size, **kwargs)
         eval_result={}
         for i in range(len(train_data_loaders)):
-            config["experiment"]["root"]=ori_root+f"/loo_{i}"
+            config["experiment"]["root"]=ori_root+f"/fold_{i}"
             for sub in ("train/weights", "train/logs", "test/output"):
-                Path(ori_root+f"/loo_{i}", sub).mkdir(parents=True, exist_ok=True)
+                Path(ori_root+f"/fold_{i}", sub).mkdir(parents=True, exist_ok=True)
             trainer = Trainer(config, train_data_loaders[i], True)
             trainer.train()
+            config["test"]["pre_trained_model_path"] = str(
+                Path(config["experiment"]["root"])/"train"/"weights"/"last_ckpt.pth.tar")
             tester = Trainer(config, test_data_loaders[i], False)
             tester.test()
             error,error_std=tester.evaluation(True)
-            eval_result[f"loo_{i}"] = (error, error_std)
+            eval_result[f"fold_{i}"] = (error, error_std)
         config["experiment"]["root"]=ori_root+"/full"
         for sub in ("train/weights", "train/logs", "test/output"):
             Path(ori_root+"/full", sub).mkdir(parents=True, exist_ok=True)
@@ -165,7 +167,7 @@ def run_loo(config,is_train):
         full_trainer.train()
         process_loo_eval_results(eval_result,keys,ori_root,"loo_eval_results")
 
-    # loo test：用外部test_dataset跑loo_*+full全部权重，每模型一个子目录，最后汇总
+    # loo test：用外部test_dataset跑fold*+full全部权重，每模型一个子目录，最后汇总
     else:
         test_dir = Path(config["test"]["test_dataset"])
         data_loader = get_test_loader(
@@ -174,7 +176,7 @@ def run_loo(config,is_train):
         out_root = Path(ori_root)/"test"/f"{test_dir.name}_test_result"
         out_root.mkdir(parents=True, exist_ok=True)
         trained_dir = sorted([i for i in Path(ori_root).iterdir()
-                              if i.is_dir() and (i.name.startswith("loo_") or i.name=="full")])
+                              if i.is_dir() and (i.name.startswith("fold_") or i.name=="full")])
         eval_result={}
         for i in trained_dir:
             ckpt = i/"train"/"weights"/"last_ckpt.pth.tar"
@@ -197,7 +199,7 @@ if __name__ == '__main__':
     p.add_argument("--config", type=str)
     p.add_argument("--mode", choices=["train", "test"], default="train")
     p.add_argument("--loo",action="store_true")
-    #test的两个参数：CLI直传，或从--config对应字段取
+    #test的两个参数：CLI直传/config
     p.add_argument("--test_dataset", default=None, type=str)
     p.add_argument("--pretrained_expname", default=None, type=str)
     args = p.parse_args()

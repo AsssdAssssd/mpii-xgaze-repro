@@ -1,11 +1,11 @@
 """Optional montage visualisation used by the pipeline."""
 
-import os
+from pathlib import Path
 
 import cv2
 import numpy as np
 
-from core.pnp import ROI, gaze_to_2d  # noqa: F401  (kept for callers)
+from core.pnp import ROI
 
 
 def make_face_tile(patch, lm_warped, gaze2d):
@@ -57,7 +57,7 @@ def save_montage(out_dir, subj, rows):
                                    cv2.BORDER_CONSTANT, value=(128, 128, 128))
         padded.append(r)
     montage = np.vstack(padded)
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"{subj}_viz.jpg")
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    path = Path(out_dir)/f"{subj}_viz.jpg"
     cv2.imwrite(path, montage)
     return path

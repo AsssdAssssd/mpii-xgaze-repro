@@ -85,7 +85,9 @@ def get_loo_loader(data_dir,
     else:
         raise FileNotFoundError(f"{data_dir} not found")
 
-    files=list(sorted(data_dir.glob("*.h5")))
+    files=list(data_dir.glob("*.h5"))
+    if not files:
+        raise FileExistsError(f"*.h5 not under {data_dir}")
     keys=[i.name for i in files]
 
     # there are three subsets for ETH-XGaze dataset: train, test and test_person_specific

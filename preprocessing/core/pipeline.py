@@ -1,109 +1,123 @@
-"""Generic detect -> PnP -> h5 pipeline, driven by a dataset adapter.
+"""Shared detect -> PnP -> h5 pipeline.
 
-A dataset adapter only has to provide subjects() and samples(subj); see
-preprocessing/dataset_struct/mpii.py for the expected sample dict:
+Any dataset adapter (see preprocessing/dataset_struct/) yields sample dicts:
 
   {
-    "key":        "p00/day01/0005"        # used for output naming
-    "image":      "/abs/path.jpg"
+    "key":        "p00/day01/0005"      # used for output naming
+    "image":      (H,W,3) BGR uint8 array, or None if unreadable
     "camera":     (3,3) matrix
     "distortion": (n,1)
     "gaze_dir":   (3,) target3d - person3d, camera coordinates
     "landmarks":  optional (68,2) if the dataset ships them
   }
+
+The image is plain pixel data, not a path: a file-based dataset decodes in its
+adapter, a video/array dataset can hand over frames or tensors directly.
 """
 
-import multiprocessing as mp
-import os
+import itertools
 import time
+from pathlib import Path
 
-import cv2
+import dlib
 import numpy as np
 import torch
 from facenet_pytorch import MTCNN
 
 from core import detect as detect_mod
-from core import loader, pnp
+from core import pnp
 from core import preview as viz
 from core.writers import H5Writer, write_failed, write_landmarks_csv
 
-
-def _load_face_model(cfg):
-    path = loader.resolve_path(cfg["paths"]["face_model"])
-    full = np.loadtxt(path).astype(np.float64)
-    return pnp.select_face_points(full), full
+OUTPUT_SUBDIRS = (
+    "landmarks",           # <subj>.csv
+    "normalized_dataset",  # <subj>.h5
+    "failed",              # <subj>_rejected.txt
+    "rotated_mesh_vis",    # <key>.txt, optional
+    "viz",                 # <subj>_viz.jpg, optional
+)
 
 
 def run(cfg, dataset):
-    in_root, dirs = loader.output_layout(cfg)
-    opt, flt, rt = cfg["options"], cfg["filter"], cfg["runtime"]
+    paths, flt, opt, rt = cfg["paths"], cfg["filter"], cfg["options"], cfg["runtime"]
 
-    need_mesh = bool(opt.get("rotated_mesh_vis", False))
-    viz_n = opt.get("viz_per_subject", 0) or 0
-    need_viz = viz_n > 0
-    keys = ["landmarks", "normalized_dataset", "failed"]
-    if need_mesh:
-        keys.append("rotated_mesh_vis")
-    if need_viz:
-        keys.append("viz")
-    loader.ensure_dirs(dirs, keys=keys)
+    out_root = paths.get("output_root")
+    if out_root:
+        out_root = Path(out_root).expanduser()
+    else:
+        in_root = Path(paths["input_root"]).expanduser()
+        out_root = in_root.parent/(in_root.name.upper() + "_normalize_output")
+    dirs = {name: out_root/name for name in OUTPUT_SUBDIRS}
+    for d in dirs.values():
+        d.mkdir(parents=True, exist_ok=True)
 
-    face_model, face_model_full = _load_face_model(cfg)
+    face_model_full = np.loadtxt(Path(paths["face_model"]).expanduser()).astype(np.float64)
+    face_model = face_model_full[pnp.FM50_USE]
 
-    limit = flt.get("limit", 0) or 0
     filters_on = flt.get("enable", True)
     max_reproj = flt.get("max_reproj", 0) or 0
     skip_undistort = flt.get("skip_undistort", False)
+    min_face = flt.get("min_face", 40)
+    gpu_conf = flt.get("gpu_conf", 0.5)
+
     overwrite = opt.get("overwrite", False)
     save_lm = opt.get("save_landmarks", True)
+    need_mesh = bool(opt.get("rotated_mesh_vis", False))
+    viz_n = opt.get("viz_per_subject", 0) or 0
+    need_viz = viz_n > 0
+
+    gpu_batch = rt.get("gpu_batch", 32)
+    print_freq = rt.get("print_freq", 50)
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA not available")
     mtcnn = MTCNN(device="cuda", select_largest=False, post_process=False)
-    pool = mp.Pool(rt.get("workers", 8) or 1,
-                   initializer=detect_mod.worker_init,
-                   initargs=(loader.resolve_path(cfg["paths"]["landmark_predictor"]),
-                             flt.get("min_face", 40)))
-    print(f"dataset={dataset.name}  out={dirs['root']}", flush=True)
+    predictor = dlib.shape_predictor(str(Path(paths["landmark_predictor"]).expanduser()))
+    print(f"dataset={dataset.name}  out={out_root}", flush=True)
 
-    try:
-        for subj in dataset.subjects():
-            samples = dataset.samples(subj)
-            if limit:
-                samples = samples[:limit]
-            if not samples:
-                print(f"[{subj}] no samples, skip", flush=True)
-                continue
+    for subj in dataset.subjects():
+        samples = dataset.samples(subj)
+        samples = iter(samples)
+        first = next(samples, None)
+        if first is None:
+            print(f"[{subj}] no samples, skip", flush=True)
+            continue
 
-            h5_path = os.path.join(dirs["normalized_dataset"], f"{subj}.h5")
-            lm_path = os.path.join(dirs["landmarks"], f"{subj}.csv")
-            if os.path.exists(h5_path) and not overwrite:
-                print(f"[{subj}] already done ({h5_path}), skip", flush=True)
-                continue
+        h5_path = dirs["normalized_dataset"]/f"{subj}.h5"
+        if h5_path.exists() and not overwrite:
+            print(f"[{subj}] already done ({h5_path}), skip", flush=True)
+            continue
 
-            t0 = time.time()
-            print(f"[{subj}] {len(samples)} samples ...", flush=True)
+        t0 = time.time()
+        writer = H5Writer(h5_path)
+        lm_rows, rejected, viz_rows = [], [], []
+        n_seen, last_print = 0, 0
 
-            if all(s.get("landmarks") is not None for s in samples):
-                lm = {s["key"]: (np.asarray(s["landmarks"], dtype=np.float32), "ok")
-                      for s in samples}
-            else:
-                res = detect_mod.detect([s["image"] for s in samples], mtcnn, pool,
-                                        rt.get("gpu_batch", 32),
-                                        flt.get("gpu_conf", 0.5),
-                                        rt.get("print_freq", 50))
-                lm = {s["key"]: res.get(s["image"], (None, "missing")) for s in samples}
+        def consume(batch):
+            nonlocal n_seen, last_print
+            n_seen += len(batch)
 
-            if save_lm:
-                write_landmarks_csv(lm_path,
-                                    [(s["key"], lm[s["key"]][0], lm[s["key"]][1])
-                                     for s in samples])
+            for s in batch:
+                if s["image"] is None:
+                    rejected.append((s["key"], "read_failed"))
 
-            writer = H5Writer(h5_path)
-            rejected = []
-            rows = []
-            for s in samples:
-                pts, reason = lm[s["key"]]
+            to_detect = [s for s in batch
+                         if s["image"] is not None and s.get("landmarks") is None]
+            boxes = detect_mod.detect_faces(
+                [s["image"] for s in to_detect], mtcnn, gpu_conf) if to_detect else []
+            box_of = {id(s): b for s, b in zip(to_detect, boxes)}
+
+            for s in batch:
+                if s["image"] is None:
+                    lm_rows.append((s["key"], None, "read_failed"))
+                    continue
+                pts = s.get("landmarks")
+                reason = "ok"
+                if pts is None:
+                    pts, reason = detect_mod.face_landmarks(
+                        s["image"], box_of[id(s)], predictor, min_face)
+                pts = None if pts is None else np.asarray(pts, dtype=np.float32)
+                lm_rows.append((s["key"], pts, reason))
                 if pts is None:
                     rejected.append((s["key"], reason))
                     continue
@@ -121,12 +135,11 @@ def run(cfg, dataset):
                     continue
 
                 if need_mesh:
-                    mesh_path = os.path.join(
-                        dirs["rotated_mesh_vis"], os.path.splitext(s["key"])[0] + ".txt")
-                    os.makedirs(os.path.dirname(mesh_path), exist_ok=True)
+                    mesh_path = dirs["rotated_mesh_vis"]/Path(s["key"]).with_suffix(".txt")
+                    mesh_path.parent.mkdir(parents=True, exist_ok=True)
                     np.savetxt(mesh_path, pnp.rotated_mesh(rvec, tvec, face_model_full))
 
-                img = cv2.imread(s["image"])
+                img = s["image"]
                 warped, hr_norm, _, R, lm_warped = pnp.normalize_face(
                     img, face_model, pts, rvec, tvec, camera)
                 gdir = R @ np.asarray(s["gaze_dir"], dtype=np.float64).reshape(3)
@@ -137,16 +150,26 @@ def run(cfg, dataset):
                 if need_viz and writer.n <= viz_n:
                     o = viz.make_orig_tile(img, pts, sub6.reshape(6, 2), reproj)
                     p = viz.make_face_tile(warped, lm_warped, gaze2d)
-                    rows.append((o, p))
+                    viz_rows.append((o, p))
 
-            writer.close()
-            if need_viz and rows:
-                viz.save_montage(dirs["viz"], subj, rows)
-            write_failed(os.path.join(dirs["failed"], f"{subj}_rejected.txt"), rejected)
+            if print_freq and n_seen - last_print >= print_freq:
+                print(f"  {n_seen}", flush=True)
+                last_print = n_seen
 
-            print(f"[{subj}] kept={writer.n}/{len(samples)} "
-                  f"rejected={len(rejected)}  {time.time() - t0:.0f}s -> {h5_path}",
-                  flush=True)
-    finally:
-        pool.close()
-        pool.join()
+        print(f"[{subj}] processing ...", flush=True)
+        batch = [first]
+        for s in samples:
+            batch.append(s)
+            if len(batch) >= gpu_batch:
+                consume(batch)
+                batch = []
+        consume(batch)
+        if save_lm:
+            write_landmarks_csv(dirs["landmarks"]/f"{subj}.csv", lm_rows)
+        if need_viz and viz_rows:
+            viz.save_montage(dirs["viz"], subj, viz_rows)
+        write_failed(dirs["failed"]/f"{subj}_rejected.txt", rejected)
+        writer.close()
+
+        print(f"[{subj}] kept={writer.n} rejected={len(rejected)} "
+              f"{time.time() - t0:.0f}s -> {h5_path}", flush=True)

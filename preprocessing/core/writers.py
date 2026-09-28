@@ -9,7 +9,7 @@ All datasets end up in the same h5 schema:
 """
 
 import csv
-import os
+from pathlib import Path
 
 import h5py
 import numpy as np
@@ -23,7 +23,7 @@ LANDMARK_HEADER = ["path"] + [f"x{i:02d}" for i in range(68)] + \
 def write_landmarks_csv(path, records):
     """records: list of (rel_path, pts68 | None, reason). Returns (ok, bad)."""
     ok = bad = 0
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(LANDMARK_HEADER)
@@ -42,14 +42,14 @@ def write_failed(path, records):
     lines = [f"{rel}\t{reason}" for rel, reason in records]
     if not lines:
         return
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
 
 
 class H5Writer:
     def __init__(self, path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.f = h5py.File(path, "w", libver="latest")
         d = self.f
         self.patch = d.create_dataset(

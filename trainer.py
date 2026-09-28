@@ -4,7 +4,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.autograd import Variable
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
-import os
+from pathlib import Path
 import time
 import numpy as np
 
@@ -23,7 +23,7 @@ class Trainer(object):
         - is_train: whether to run in training mode
         """
 
-        self.root= config["experiment"]["root"]
+        self.root = Path(config["experiment"]["root"])
 
         self.batch_size = config["experiment"]["batch_size"]
         self.epochs = config["train"]["epochs"]  # the total epoch to train
@@ -37,17 +37,17 @@ class Trainer(object):
             self.lr = config["train"]["init_lr"]
             self.lr_patience = config["train"]["lr_patience"]
             self.lr_decay_factor = config["train"]["lr_decay_factor"]
-            self.ckpt_dir = os.path.join(f"{self.root}/train/weights")
+            self.ckpt_dir = self.root/"train"/"weights"
             self.print_freq = config["train"]["print_freq"]
             self.train_iter = 0
            # configure tensorboard logging
-            log_dir = os.path.join(f"{self.root}/train/logs")
+            log_dir = self.root/"train"/"logs"
             self.writer = SummaryWriter(log_dir=log_dir)
 
         else:
             self.test_loader = data_loader
             self.num_test = len(self.test_loader.dataset)
-            self.pre_trained_model_path = config["test"]["pre_trained_model_path"].format(root=self.root,epochs=self.epochs)
+            self.pre_trained_model_path = Path(config["test"]["pre_trained_model_path"].format(root=self.root,epochs=self.epochs))
 
         # build model
         self.model = gaze_network(backbone=config["train"]["backbone"])
@@ -178,7 +178,7 @@ class Trainer(object):
         # save predictions grouped by key: a "key:<h5 filename>" header line
         # followed by the "x y" lines belonging to that key
         dataset = self.test_loader.dataset
-        result_path = f'{self.root}/test/output/test_results.txt'
+        result_path = self.root/"test"/"output"/"test_results.txt"
         with open(result_path, 'w') as f:
             cur_key = None
             for i in range(self.num_test):
@@ -212,7 +212,7 @@ class Trainer(object):
         return {k: np.asarray(v, dtype=np.float64) for k, v in data.items()}
 
     def evaluation(self, write=True):
-        output_dir = os.path.join(f"{self.root}/test/output")
+        output_dir = self.root/"test"/"output"
 
         print('now we begin')
 
@@ -220,7 +220,7 @@ class Trainer(object):
         truth = self.test_loader.dataset.get_labels_keyed()
 
         print('loading submission file')
-        submission = self._load_keyed(os.path.join(output_dir, "test_results.txt"))
+        submission = self._load_keyed(output_dir/"test_results.txt")
 
         print('now compute the gaze error')
         errors = []
@@ -239,7 +239,7 @@ class Trainer(object):
         error_std = np.std(error_all)
         
         if write:
-            output_filename = os.path.join(output_dir, 'eva_scores.txt')
+            output_filename = output_dir/'eva_scores.txt'
             with open(output_filename, 'w') as output_file:
                 output_file.write("gaze_error: %0.4f\n" % error)
                 output_file.write("gaze_error_std: %0.4f\n" % error_std)
@@ -252,7 +252,7 @@ class Trainer(object):
         Save the latest copy of the model (overwrites the previous epoch).
         """
         filename = 'last_ckpt.pth.tar'
-        ckpt_path = os.path.join(self.ckpt_dir, filename)
+        ckpt_path = self.ckpt_dir/filename
         torch.save(state, ckpt_path)
 
         print('save file to: ', ckpt_path)
@@ -261,6 +261,7 @@ class Trainer(object):
         """
         Load the copy of a model.
         """
+        input_file_path = Path(input_file_path)
         print('load the pre-trained model: ', input_file_path)
         ckpt = torch.load(input_file_path, weights_only=False)
 
