@@ -1,2 +1,0 @@
-gaze_error: 0.6111
-gaze_error_std: 0.9690

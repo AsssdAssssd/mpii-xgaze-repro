@@ -1,7 +1,7 @@
 experiment:
   name: xgaze2mpii
   root: ./exp/{name}
-  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalize_output"
+  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalize_output" #loo下，该文件夹即全量数据集文件夹，无train_test_split
   batch_size: 50
   num_workers: 5
 

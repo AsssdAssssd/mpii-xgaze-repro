@@ -3,7 +3,7 @@ import h5py
 import torch
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-import os
+from pathlib import Path
 import json
 import random
 from typing import List
@@ -28,8 +28,11 @@ def get_train_loader(data_dir,
                            num_workers=4,
                            is_shuffle=True):
     # load dataset
-    refer_list_file = os.path.join(data_dir, 'train_test_split.json')
-    print('load the train file list from: ', refer_list_file)
+    refer_list_file =(Path(data_dir) /'train_test_split.json')
+    if refer_list_file.exists():
+        print('load the train file list from: ', refer_list_file)
+    else:
+        raise FileNotFoundError(f"{refer_list_file} not found")
 
     with open(refer_list_file, 'r') as f:
         datastore = json.load(f)
@@ -51,8 +54,11 @@ def get_test_loader(data_dir,
                            num_workers=4,
                            is_shuffle=True):
     # load dataset
-    refer_list_file = os.path.join(data_dir, 'train_test_split.json')
-    print('load the train file list from: ', refer_list_file)
+    refer_list_file =(Path(data_dir) /'train_test_split.json')
+    if refer_list_file.exists():
+        print('load the train file list from: ', refer_list_file)
+    else:
+        raise FileNotFoundError(f"{refer_list_file} not found")
 
     with open(refer_list_file, 'r') as f:
         datastore = json.load(f)
@@ -67,6 +73,40 @@ def get_test_loader(data_dir,
     test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
 
     return test_loader
+
+
+def get_loo_loader(data_dir,
+                           batch_size,
+                           num_workers=4):
+    # load dataset
+    data_dir=Path(data_dir)
+    if data_dir.is_dir():
+        print('load datasets from: ', data_dir)
+    else:
+        raise FileNotFoundError(f"{data_dir} not found")
+
+    files=list(sorted(data_dir.glob("*.h5")))
+    keys=[i.name for i in files]
+
+    # there are three subsets for ETH-XGaze dataset: train, test and test_person_specific
+    # train set: the training set includes 80 participants data
+    # test set: the test set for cross-dataset and within-dataset evaluations
+    # test_person_specific: evaluation subset for the person specific setting
+    sub_folder_use = ''
+    train_loaders,test_loaders=[],[]
+    for i in range(len(keys)):
+        train_set = GazeDataset(dataset_path=data_dir, keys_to_use=[k for k in keys if k != keys[i]], sub_folder=sub_folder_use,
+                                transform=trans, is_shuffle=True, is_load_label=True)
+        train_loader = DataLoader(train_set, batch_size=batch_size, num_workers=num_workers)
+        test_set = GazeDataset(dataset_path=data_dir, keys_to_use=[keys[i]], sub_folder=sub_folder_use,
+                                transform=trans, is_shuffle=False, is_load_label=False)
+        test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
+        train_loaders.append(train_loader)
+        test_loaders.append(test_loader)
+    full_set = GazeDataset(dataset_path=data_dir, keys_to_use=keys, sub_folder=sub_folder_use,
+                                    transform=trans, is_shuffle=True, is_load_label=True)
+    full_test_loader = DataLoader(full_set, batch_size=batch_size, num_workers=num_workers)
+    return train_loaders,test_loaders,full_test_loader,keys
 
 
 class GazeDataset(Dataset):
@@ -84,10 +124,10 @@ class GazeDataset(Dataset):
         assert len(self.selected_keys) > 0
 
         for num_i in range(0, len(self.selected_keys)):
-            file_path = os.path.join(self.path, self.sub_folder, self.selected_keys[num_i])
+            file_path =Path(self.path)/self.sub_folder/ self.selected_keys[num_i]
             self.hdfs[num_i] = h5py.File(file_path, 'r', swmr=True)
-            # print('read file: ', os.path.join(self.path, self.selected_keys[num_i]))
             assert self.hdfs[num_i].swmr_mode
+        
 
         # Construct mapping from full-data index to key and person-specific index
         if index_file is None:
@@ -122,7 +162,7 @@ class GazeDataset(Dataset):
     def __getitem__(self, idx):
         key, idx = self.idx_to_kv[idx]
 
-        self.hdf = h5py.File(os.path.join(self.path, self.sub_folder, self.selected_keys[key]), 'r', swmr=True)
+        self.hdf = h5py.File(Path(self.path)/self.sub_folder/self.selected_keys[key], 'r', swmr=True)
         assert self.hdf.swmr_mode
 
         # Get face image
@@ -137,6 +177,15 @@ class GazeDataset(Dataset):
             return image, gaze_label
         else:
             return image
+
+    def get_labels_keyed(self):
+        # eval用：从源h5里读face_gaze，{key: (n,2)}，行序与h5原生顺序一致
+        labels = {}
+        for key in self.selected_keys:
+            hdf = h5py.File(Path(self.path)/self.sub_folder/key, 'r', swmr=True)
+            labels[key] = np.asarray(hdf['face_gaze'][:], dtype=np.float64)
+            hdf.close()
+        return labels
 
 
 

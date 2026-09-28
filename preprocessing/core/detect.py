@@ -1,10 +1,7 @@
-"""Generic face detection + 68 landmark detection (dataset agnostic).
+"""人脸检测 + 68 关键点 (dataset agnostic).
 
-Two modes, same as the original MPII script:
-  gpu : facenet MTCNN on CUDA for face boxes + dlib for 68 landmarks
-  cnn : dlib CNN face detector + dlib 68 landmarks (CPU, multiprocessing)
-
-Both return a dict {image_path: (pts68 | None, reason)}.
+MTCNN (CUDA) 出人脸框，dlib 出 68 关键点；
+detect() 返回 dict {image_path: (pts68 | None, reason)}。
 """
 
 import cv2
@@ -12,9 +9,7 @@ import dlib
 import numpy as np
 from imutils import face_utils
 
-_DETECTOR = None
 _PREDICTOR = None
-_UPSAMPLE = 1
 _MIN_FACE = 40
 
 
@@ -43,36 +38,10 @@ def pick_largest_box(boxes, probs):
     return b[i]
 
 
-def worker_init(mode, upsample, min_face, detector_path, predictor_path):
-    global _DETECTOR, _PREDICTOR, _UPSAMPLE, _MIN_FACE
-    _UPSAMPLE = upsample
-    _MIN_FACE = min_face
-    if mode == "cnn":
-        cv2.setNumThreads(1)
-        _DETECTOR = dlib.cnn_face_detection_model_v1(detector_path)
+def worker_init(predictor_path, min_face):
+    global _PREDICTOR, _MIN_FACE
     _PREDICTOR = dlib.shape_predictor(predictor_path)
-
-
-def _cnn_worker(fpath):
-    img = cv2.imread(fpath)
-    if img is None:
-        return fpath, None, "read_failed"
-    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    faces = _DETECTOR(rgb, _UPSAMPLE)
-    if len(faces) == 0:
-        return fpath, None, "no_face"
-    best, best_area = None, 0
-    for f in faces:
-        r = f.rect
-        area = r.width() * r.height()
-        if area > best_area:
-            best, best_area = r, area
-    if best is None or min(best.width(), best.height()) < _MIN_FACE:
-        return fpath, None, "face_too_small"
-    pts = face_utils.shape_to_np(_PREDICTOR(rgb, best))
-    if pts.shape[0] != 68:
-        return fpath, None, "bad_shape"
-    return fpath, pts.astype(np.float32), "ok"
+    _MIN_FACE = min_face
 
 
 def _lm_worker(task):
@@ -93,7 +62,7 @@ def _lm_worker(task):
     return fpath, pts.astype(np.float32), "ok"
 
 
-def run_gpu(files, mtcnn, pool, gpu_batch, gpu_conf, print_freq):
+def detect(files, mtcnn, pool, gpu_batch, gpu_conf, print_freq):
     results = {}
     n = len(files)
     for start in range(0, n, gpu_batch):
@@ -107,18 +76,14 @@ def run_gpu(files, mtcnn, pool, gpu_batch, gpu_conf, print_freq):
                 imgs.append(im)
                 valid.append(p)
 
-        boxes_per_img, probs_per_img = None
+        boxes_per_img, probs_per_img = [], []
         if imgs:
-            rgb = [cv2.cvtColor(im, cv2.COLOR_BGR2RGB) for im in imgs]
             try:
+                rgb = [cv2.cvtColor(im, cv2.COLOR_BGR2RGB) for im in imgs]
                 out = mtcnn.detect(rgb)
-                if not isinstance(out, (list, tuple)) or len(out) < 2:
-                    raise RuntimeError("unexpected mtcnn.detect output")
                 boxes_per_img, probs_per_img = out[0], out[1]
             except Exception:
-                boxes_per_img = None
-            if boxes_per_img is None:
-                boxes_per_img, probs_per_img = [], []
+                # batch失败就逐张来
                 for im in imgs:
                     res = mtcnn.detect(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
                     boxes_per_img.append(to_box_arr(res[0]))
@@ -126,14 +91,10 @@ def run_gpu(files, mtcnn, pool, gpu_batch, gpu_conf, print_freq):
 
         tasks = []
         for i, p in enumerate(valid):
-            if boxes_per_img is None:
-                box = None
-            else:
-                b = to_box_arr(boxes_per_img[i])
-                pr = to_prob_arr(probs_per_img[i])[:len(b)]
-                keep = np.isfinite(pr) & (pr >= gpu_conf)
-                box = pick_largest_box(b[keep], pr[keep])
-            tasks.append((p, box))
+            b = to_box_arr(boxes_per_img[i])
+            pr = to_prob_arr(probs_per_img[i])[:len(b)]
+            keep = np.isfinite(pr) & (pr >= gpu_conf)
+            tasks.append((p, pick_largest_box(b[keep], pr[keep])))
 
         for fpath, pts, status in pool.imap_unordered(_lm_worker, tasks, chunksize=4):
             results[fpath] = (pts, status)
@@ -141,14 +102,4 @@ def run_gpu(files, mtcnn, pool, gpu_batch, gpu_conf, print_freq):
         done = start + len(batch_paths)
         if done % print_freq == 0 or done == n:
             print(f"  {done}/{n}", flush=True)
-    return results
-
-
-def run_cnn(files, pool, print_freq):
-    results = {}
-    for n, (fpath, pts, status) in enumerate(
-            pool.imap_unordered(_cnn_worker, files, chunksize=8)):
-        results[fpath] = (pts, status)
-        if (n + 1) % print_freq == 0 or (n + 1) == len(files):
-            print(f"  {n + 1}/{len(files)}", flush=True)
     return results

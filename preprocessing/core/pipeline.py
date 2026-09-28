@@ -19,6 +19,8 @@ import time
 
 import cv2
 import numpy as np
+import torch
+from facenet_pytorch import MTCNN
 
 from core import detect as detect_mod
 from core import loader, pnp
@@ -30,35 +32,6 @@ def _load_face_model(cfg):
     path = loader.resolve_path(cfg["paths"]["face_model"])
     full = np.loadtxt(path).astype(np.float64)
     return pnp.select_face_points(full), full
-
-
-def _make_detector(cfg):
-    opt, flt, rt = cfg["options"], cfg["filter"], cfg["runtime"]
-    mode = opt.get("detector", "gpu")
-    workers = rt.get("workers", 8) or 1
-    initargs = (mode, opt.get("upsample", 1), flt.get("min_face", 40),
-                loader.resolve_path(cfg["paths"]["face_detector"]),
-                loader.resolve_path(cfg["paths"]["landmark_predictor"]))
-    pool = mp.Pool(workers, initializer=detect_mod.worker_init, initargs=initargs)
-
-    mtcnn = None
-    if mode == "gpu":
-        import torch
-        from facenet_pytorch import MTCNN
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA not available, set options.detector: cnn")
-        mtcnn = MTCNN(device="cuda", select_largest=False, post_process=False)
-    return mode, pool, mtcnn
-
-
-def _detect(mode, files, pool, mtcnn, cfg):
-    rt, flt = cfg["runtime"], cfg["filter"]
-    if mode == "gpu":
-        return detect_mod.run_gpu(files, mtcnn, pool,
-                                  rt.get("gpu_batch", 32),
-                                  flt.get("gpu_conf", 0.5),
-                                  rt.get("print_freq", 50))
-    return detect_mod.run_cnn(files, pool, rt.get("print_freq", 50))
 
 
 def run(cfg, dataset):
@@ -84,8 +57,14 @@ def run(cfg, dataset):
     overwrite = opt.get("overwrite", False)
     save_lm = opt.get("save_landmarks", True)
 
-    mode, pool, mtcnn = _make_detector(cfg)
-    print(f"dataset={dataset.name}  detector={mode}  out={dirs['root']}", flush=True)
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA not available")
+    mtcnn = MTCNN(device="cuda", select_largest=False, post_process=False)
+    pool = mp.Pool(rt.get("workers", 8) or 1,
+                   initializer=detect_mod.worker_init,
+                   initargs=(loader.resolve_path(cfg["paths"]["landmark_predictor"]),
+                             flt.get("min_face", 40)))
+    print(f"dataset={dataset.name}  out={dirs['root']}", flush=True)
 
     try:
         for subj in dataset.subjects():
@@ -109,7 +88,10 @@ def run(cfg, dataset):
                 lm = {s["key"]: (np.asarray(s["landmarks"], dtype=np.float32), "ok")
                       for s in samples}
             else:
-                res = _detect(mode, [s["image"] for s in samples], pool, mtcnn, cfg)
+                res = detect_mod.detect([s["image"] for s in samples], mtcnn, pool,
+                                        rt.get("gpu_batch", 32),
+                                        flt.get("gpu_conf", 0.5),
+                                        rt.get("print_freq", 50))
                 lm = {s["key"]: res.get(s["image"], (None, "missing")) for s in samples}
 
             if save_lm:

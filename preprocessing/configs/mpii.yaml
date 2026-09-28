@@ -12,7 +12,6 @@ paths:
   output_root: null
   # 50-point 3D face model; 6 PnP points are selected via FM50_USE
   face_model: configs/face_model/xgaze_face_model.txt
-  face_detector: modules/mmod_human_face_detector.dat
   landmark_predictor: modules/shape_predictor_68_face_landmarks.dat
 
 filter:
@@ -24,8 +23,6 @@ filter:
   skip_undistort: false  # ignore camera distortion in PnP
 
 options:
-  detector: gpu          # gpu (MTCNN on CUDA) | cnn (dlib, CPU)
-  upsample: 1            # dlib cnn detector 放大倍数
   save_landmarks: true   # write landmarks/<subj>.csv
   rotated_mesh_vis: False # write rotated_mesh_vis/<key>.txt
   viz_per_subject: 0     # montage tiles per subject, 0 = off

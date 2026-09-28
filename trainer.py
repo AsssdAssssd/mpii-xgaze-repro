@@ -23,10 +23,9 @@ class Trainer(object):
         - is_train: whether to run in training mode
         """
 
-        self.root= config["experiment"]["root"].format(name=config["experiment"]["name"])
+        self.root= config["experiment"]["root"]
 
         self.batch_size = config["experiment"]["batch_size"]
-        self.use_gpu = config["experiment"]["use_gpu"]
         self.epochs = config["train"]["epochs"]  # the total epoch to train
         # data params
         if is_train:
@@ -50,14 +49,9 @@ class Trainer(object):
             self.num_test = len(self.test_loader.dataset)
             self.pre_trained_model_path = config["test"]["pre_trained_model_path"].format(root=self.root,epochs=self.epochs)
 
-        if self.use_gpu and torch.cuda.device_count() > 1:
-            print("Let's use", torch.cuda.device_count(), "GPUs!")
-
- 
         # build model
         self.model = gaze_network(backbone=config["train"]["backbone"])
-        if self.use_gpu:
-            self.model.cuda()
+        self.model.cuda()
 
         print('[*] Number of model parameters: {:,}'.format(
             sum([p.data.nelement() for p in self.model.parameters()])))
@@ -217,13 +211,13 @@ class Trainer(object):
                     data[cur_key].append([float(v) for v in line.split()])
         return {k: np.asarray(v, dtype=np.float64) for k, v in data.items()}
 
-    def evaluation(self, eval_path):
+    def evaluation(self, write=True):
         output_dir = os.path.join(f"{self.root}/test/output")
 
         print('now we begin')
 
-        print('loading truth_file')
-        truth = self._load_keyed(eval_path)
+        print('loading truth from the source h5')
+        truth = self.test_loader.dataset.get_labels_keyed()
 
         print('loading submission file')
         submission = self._load_keyed(os.path.join(output_dir, "test_results.txt"))
@@ -243,12 +237,15 @@ class Trainer(object):
 
         error = np.mean(error_all)
         error_std = np.std(error_all)
-        output_filename = os.path.join(output_dir, 'eva_scores.txt')
-        with open(output_filename, 'w') as output_file:
-            output_file.write("gaze_error: %0.4f\n" % error)
-            output_file.write("gaze_error_std: %0.4f\n" % error_std)
+        
+        if write:
+            output_filename = os.path.join(output_dir, 'eva_scores.txt')
+            with open(output_filename, 'w') as output_file:
+                output_file.write("gaze_error: %0.4f\n" % error)
+                output_file.write("gaze_error_std: %0.4f\n" % error_std)
         print('gaze_error: ', error)
         print('gaze_error_std: ', error_std)
+        return error, error_std
 
     def save_checkpoint(self, state):
         """
@@ -265,8 +262,7 @@ class Trainer(object):
         Load the copy of a model.
         """
         print('load the pre-trained model: ', input_file_path)
-        map_location = 'cuda' if self.use_gpu else 'cpu'
-        ckpt = torch.load(input_file_path, map_location=map_location, weights_only=False)
+        ckpt = torch.load(input_file_path, weights_only=False)
 
         # load variables from checkpoint
         self.model.load_state_dict(ckpt['model_state'], strict=is_strict)
