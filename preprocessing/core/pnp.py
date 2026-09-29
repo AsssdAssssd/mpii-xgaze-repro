@@ -1,12 +1,3 @@
-"""Generic head-pose / normalization math (dataset agnostic).
-
-Everything here works on camera coordinates only. A dataset adapter is
-responsible for producing:
-  - 68 landmarks (2D, image pixels)
-  - camera matrix + distortion
-  - gaze direction in camera coordinates, i.e. (target3d - person3d)
-"""
-
 import cv2
 import numpy as np
 
@@ -17,7 +8,6 @@ FM50_USE = [20, 23, 26, 29, 15, 19]
 FOCAL_NORM = 960
 DIST_NORM = 600
 ROI = (224, 224)
-
 
 def estimate_head_pose(landmarks6, face_model6, camera, distortion):
     """Return (rvec, tvec, reproj(6,2), mean_reproj_err) or (None,)*4."""
@@ -34,11 +24,6 @@ def estimate_head_pose(landmarks6, face_model6, camera, distortion):
     err = float(np.mean(np.linalg.norm(
         reproj - landmarks6.reshape(6, 2), axis=1)))
     return rvec, tvec, reproj, err
-
-
-def rotated_mesh(rvec, tvec, face_model_full):
-    R, _ = cv2.Rodrigues(rvec)
-    return (R @ np.asarray(face_model_full).T + tvec.reshape(3, 1)).T
 
 
 def normalize_face(image, face_model6, landmarks68, rvec, tvec, camera):
@@ -82,5 +67,5 @@ def normalize_face(image, face_model6, landmarks68, rvec, tvec, camera):
     det_point = landmarks68.reshape(-1, 1, 2)
     lm_warped = cv2.perspectiveTransform(det_point, W).reshape(-1, 2)
 
-    return img_warped, hr_norm, face_center, R, lm_warped
+    return img_warped, hr_norm, R, lm_warped
 

@@ -1,5 +1,4 @@
-"""Generic output writers (dataset agnostic).
-
+"""Generic output writers 
 All datasets end up in the same h5 schema:
   face_patch (N,224,224,3) uint8
   face_gaze (N,2) float32

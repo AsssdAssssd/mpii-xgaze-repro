@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from core import pipeline
+from core.pipeline import Pipeline
 from dataset_struct import get_dataset
 
 CONFIG_DIR = Path(__file__).resolve().parent/"configs"
@@ -11,7 +11,7 @@ CONFIG_DIR = Path(__file__).resolve().parent/"configs"
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--dataset_type", default="mpii")
+    p.add_argument("--dataset_type", default="mpii",choices=["mpii","eve"])
     p.add_argument("--config", default=None, help="default: configs/<dataset_type>.yaml")
     args = p.parse_args()
 
@@ -23,7 +23,8 @@ def main():
 
     cfg["dataset"] = args.dataset_type
 
-    pipeline.run(cfg, get_dataset(cfg))
+    pipeline=Pipeline(cfg, get_dataset(cfg))
+    pipeline.run()
 
 
 if __name__ == "__main__":

@@ -10,7 +10,6 @@ filter:
   enable: true           # false -> ignore min_face / max_reproj
   min_face: 40           # drop faces with bbox min side < this (px)
   max_reproj: 8.0        # drop samples with PnP reprojection error > this (px)
-  conf: 0.5          # MTCNN confidence threshold
   skip_undistort: false  # ignore camera distortion in PnP
 
 options:
@@ -21,5 +20,5 @@ options:
 
 runtime:
   subjects: ""           # comma list, empty = p00..p14
-  gpu_batch: 32
+  gpu_batch: 25
   print_freq: 50
