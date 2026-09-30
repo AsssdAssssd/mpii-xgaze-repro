@@ -157,7 +157,7 @@ class Trainer(object):
         only save the predicted results. You then need to submit the test resutls to our evaluation website to
         get the final gaze estimation error.
         """
-        print('We are now doing the final test')
+        print('test')
         self.model.eval()
         self.load_checkpoint(is_strict=False, input_file_path=self.pre_trained_model_path)
         pred_gaze_all = np.zeros((self.num_test, 2))

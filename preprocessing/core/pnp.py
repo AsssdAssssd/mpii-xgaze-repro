@@ -39,11 +39,13 @@ def normalize_face(image, face_model6, landmarks68, rvec, tvec, camera):
 
     distance = np.linalg.norm(face_center)
     z_scale = DIST_NORM / distance
+
     cam_norm = np.array([
         [FOCAL_NORM, 0, ROI[0] / 2],
         [0, FOCAL_NORM, ROI[1] / 2],
         [0, 0, 1.0],
     ])
+    
     S = np.array([
         [1.0, 0.0, 0.0],
         [0.0, 1.0, 0.0],

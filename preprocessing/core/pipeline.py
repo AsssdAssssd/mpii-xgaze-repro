@@ -126,6 +126,7 @@ class Pipeline:
 
 
     def process_batch(self,batch,index):
+        if not batch:return
 
         boxes = self.detecter.detect_faces( [s["image"] for s in batch])
 
@@ -142,8 +143,8 @@ class Pipeline:
             camera = s["camera"]
             distortion = np.zeros((5, 1)) if self.skip_undistort else s["distortion"]
             source = pts[pnp.LM68_USE].astype(np.float32).reshape(6, 1, 2)
-            rvec, tvec, reproj, err = pnp.estimate_head_pose(
-                source, self.face_model, camera, distortion)
+            rvec, tvec, reproj, err = pnp.estimate_head_pose(source, self.face_model, camera, distortion)
+
             if rvec is None:
                 self.rejected.append((s["key"], "pnp_failed"))
                 continue
@@ -158,8 +159,7 @@ class Pipeline:
                 np.savetxt(mesh_path,(R @ np.asarray(self.face_model_full).T + tvec.reshape(3, 1)).T)
 
             #normailzed 
-            warped, hr_norm, R, lm_warped = pnp.normalize_face(
-                s["image"], self.face_model, pts, rvec, tvec, camera)
+            warped, hr_norm, R, lm_warped = pnp.normalize_face( s["image"], self.face_model, pts, rvec, tvec, camera)
             #transform
             gdir = R @ np.asarray(s["gaze_dir"], dtype=np.float64).reshape(3)
             n = gdir / np.linalg.norm(gdir)
