@@ -48,6 +48,31 @@ def get_train_loader(data_dir,
 
     return train_loader
 
+def get_val_loader(data_dir,
+                           batch_size,
+                           num_workers=4,
+                           is_shuffle=True):
+    # load dataset
+    refer_list_file =(Path(data_dir) /'train_test_split.json')
+    if refer_list_file.exists():
+        print('load the train file list from: ', refer_list_file)
+    else:
+        raise FileNotFoundError(f"{refer_list_file} not found")
+
+    with open(refer_list_file, 'r') as f:
+        datastore = json.load(f)
+
+    # there are three subsets for ETH-XGaze dataset: train, test and test_person_specific
+    # train set: the training set includes 80 participants data
+    # test set: the test set for cross-dataset and within-dataset evaluations
+    # test_person_specific: evaluation subset for the person specific setting
+    sub_folder_use = 'val'
+    val_set = GazeDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
+                          transform=trans, is_shuffle=is_shuffle, is_load_label=True)
+    val_loader = DataLoader(val_set, batch_size=batch_size, num_workers=num_workers)
+
+    return val_loader
+
 
 def get_test_loader(data_dir,
                            batch_size,

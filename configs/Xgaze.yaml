@@ -12,6 +12,10 @@ train:
   init_lr: 0.0001
   lr_patience: 10
   lr_decay_factor: 0.1
+  save_freq: 5
+  enable_val: true #这种情况默认使用train_test_split的val
+
+
 
 test:
   pretrained_expname: Xgaze

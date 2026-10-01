@@ -8,7 +8,7 @@ import torch
 import yaml
 
 from trainer import Trainer
-from data_loader import get_train_loader, get_test_loader,get_loo_loader
+from data_loader import get_train_loader, get_test_loader,get_loo_loader,get_val_loader
 
 
 def load_config(config_path, mode,is_loo):
@@ -93,6 +93,7 @@ def run(config,is_train):
         data_loader = get_train_loader(
             data_dir, batch_size, is_shuffle=True, **kwargs)
         trainer = Trainer(config, data_loader, is_train)
+        trainer.set_val_loader(get_val_loader(data_dir, batch_size, is_shuffle=False, **kwargs))
         trainer.train()
     # test只认两个参数：本exp的last_ckpt + config["test"]["test_dataset"]，输出到 exp/{name}/test/{test_dataset.name}_test_result
     else:
@@ -153,7 +154,10 @@ def run_loo(config,is_train):
             for sub in ("train/weights", "train/logs","test/output"):
                 Path(ori_root+"/train"+f"/fold_{i}", sub).mkdir(parents=True, exist_ok=True)
             trainer = Trainer(config, train_data_loaders[i], True)
+            trainer.set_val_loader(test_data_loaders[i])
             trainer.train()
+
+            
             config["test"]["pre_trained_model_path"] = str(
                 Path(config["experiment"]["root"])/"train"/"weights"/"last_ckpt.pth.tar")
             tester = Trainer(config, test_data_loaders[i], False)
@@ -176,7 +180,7 @@ def run_loo(config,is_train):
         out_root = Path(ori_root)/"test"/f"{test_dir.name}_test_result"
         out_root.mkdir(parents=True, exist_ok=True)
         trained_dir = sorted([i for i in (Path(ori_root)/"train").iterdir()
-                              if i.is_dir() and (i.name.startswith("fold_") or i.name=="full")])
+                              if i.is_dir() and i.name=="full"])#现在只留下full
         eval_result={}
         for i in trained_dir:
             ckpt = i/"train"/"weights"/"last_ckpt.pth.tar"

@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
+import logging
 from torch.autograd import Variable
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
@@ -8,7 +8,7 @@ from pathlib import Path
 import time
 import numpy as np
 
-from utils import AverageMeter, angular_error
+from utils import AverageMeter, angular_error, HistorySaver
 from model import gaze_network
 
 class Trainer(object):
@@ -27,11 +27,14 @@ class Trainer(object):
 
         self.batch_size = config["experiment"]["batch_size"]
         self.epochs = config["train"]["epochs"]  # the total epoch to train
+        self.logger=logging.getLogger(__name__+Path(config["experiment"]["root"]).name+str(time.time()))
+        self.logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s -[ %(levelname)s ]- %(message)s')
+        self.is_train=is_train
         # data params
         if is_train:
             self.train_loader = data_loader
             self.num_train = len(self.train_loader.dataset)
-
             # training params
             self.start_epoch = 0
             self.lr = config["train"]["init_lr"]
@@ -40,14 +43,25 @@ class Trainer(object):
             self.ckpt_dir = self.root/"train"/"weights"
             self.print_freq = config["train"]["print_freq"]
             self.train_iter = 0
+            self.save_freq = config["train"]["save_freq"]
            # configure tensorboard logging
             log_dir = self.root/"train"/"logs"
-            self.writer = SummaryWriter(log_dir=log_dir)
+            file_handler = logging.FileHandler(log_dir/f"{str(time.time()):.6f}.log")
+
+            self.enable_val = config["train"].get("enable_val", False)
+            self.history = HistorySaver(log_dir)
 
         else:
             self.test_loader = data_loader
             self.num_test = len(self.test_loader.dataset)
             self.pre_trained_model_path = Path(config["test"]["pre_trained_model_path"].format(root=self.root,epochs=self.epochs))
+            log_dir = self.root/"test"/"output"
+            file_handler = logging.FileHandler(log_dir/f"{str(time.time()):.6f}.log")
+            
+            # self.logger.addHandler(logging.StreamHandler())
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.DEBUG)
+        self.logger.addHandler(file_handler)
 
         # build model
         self.model = gaze_network(backbone=config["train"]["backbone"])
@@ -62,36 +76,79 @@ class Trainer(object):
                 self.model.parameters(), lr=self.lr)
             self.scheduler = StepLR(
                 self.optimizer, step_size=self.lr_patience, gamma=self.lr_decay_factor)
+            self.check_resume()
+            
+    def check_resume(self):
+        """
+        Check if a checkpoint exists and resume training from it.
+        """
+        last_ckpt_path = self.ckpt_dir/"last_ckpt.pth.tar"
+        if last_ckpt_path.exists():
+            ckpt = torch.load(last_ckpt_path, weights_only=False)
+            self.model.load_state_dict(ckpt['model_state'], strict=True)
+            self.optimizer.load_state_dict(ckpt['optim_state'])
+            self.scheduler.load_state_dict(ckpt['scheule_state'])
+            self.start_epoch = ckpt['epoch'] + 1
+            print(
+                "[*] Resumed from {} @ epoch {}".format(
+                    last_ckpt_path, ckpt['epoch'])
+            )
+            self.logger.info("[*] Resumed from {} @ epoch {}".format(last_ckpt_path, ckpt['epoch']))
+            self.scheduler.step()  # update learning rate
 
     def train(self):
         print("\n[*] Train on {} samples".format(self.num_train))
+        train_start = time.time()
         # train for each epoch
         for epoch in range(self.start_epoch, self.epochs):
+            epoch_tic = time.time()
+            epoch_lr = self.optimizer.param_groups[0]["lr"]
+            torch.cuda.reset_peak_memory_stats()
             print(
                 '\nEpoch: {}/{} - base LR: {:.6f}'.format(
                     epoch + 1, self.epochs, self.lr)
             )
+            self.logger.info('Epoch: {}/{} - base LR: {:.6f}'.format(epoch + 1, self.epochs, self.lr))
 
             for param_group in self.optimizer.param_groups:
                 print('Learning rate: ', param_group['lr'])
+                self.logger.info('Learning rate: {:.6f}'.format(param_group['lr']))
 
             # train for 1 epoch
             print('Now go to training')
             self.model.train()
-            train_acc, loss_gaze = \
+            train_err, train_loss = \
                 self.train_one_epoch(epoch, self.train_loader)
+            train_time = time.time() - epoch_tic
 
-            # keep only the latest checkpoint (overwrite each epoch)
             self.save_checkpoint(
-                {'epoch': epoch + 1,
-                 'model_state': self.model.state_dict(),
-                 'optim_state': self.optimizer.state_dict(),
-                 'scheule_state': self.scheduler.state_dict()
-                 }
+                {'epoch': epoch ,
+                    'model_state': self.model.state_dict(),
+                    'optim_state': self.optimizer.state_dict(),
+                    'scheule_state': self.scheduler.state_dict()
+                    }
             )
             self.scheduler.step()  # update learning rate
 
-        self.writer.close()
+            val_time = 0.0
+            val_metrics = {}
+            if self.enable_val == 0:
+                val_tic = time.time()
+                val_metrics = self.validate()
+                val_time = time.time() - val_tic
+
+            self.history.write({
+                "epoch": epoch + 1,
+                "step": self.train_iter,
+                "lr": epoch_lr,
+                "elapsed": time.time() - train_start,
+                "train_time": train_time,
+                "val_time": val_time,
+                "gpu_mem_mb": torch.cuda.max_memory_allocated() / (1024.0 ** 2),
+                "train_loss": train_loss,
+                "train_err_ang_mean": train_err,
+                **val_metrics,
+            })
 
 
     def train_one_epoch(self, epoch, data_loader):
@@ -101,6 +158,9 @@ class Trainer(object):
         batch_time = AverageMeter()
         errors = AverageMeter()
         losses_gaze = AverageMeter()
+        # epoch-level meters, never reset, used for the history file
+        epoch_errors = AverageMeter()
+        epoch_losses = AverageMeter()
 
         tic = time.time()
         for i, (input_img, target) in enumerate(data_loader):
@@ -112,15 +172,18 @@ class Trainer(object):
 
             gaze_error_batch = np.mean(angular_error(pred_gaze.cpu().data.numpy(), target_var.cpu().data.numpy()))
             errors.update(gaze_error_batch.item(), input_var.size()[0])
+            epoch_errors.update(gaze_error_batch.item(), input_var.size()[0])
 
             loss_gaze = F.l1_loss(pred_gaze, target_var)
             self.optimizer.zero_grad()
             loss_gaze.backward()
             self.optimizer.step()
             losses_gaze.update(loss_gaze.item(), input_var.size()[0])
+            epoch_losses.update(loss_gaze.item(), input_var.size()[0])
 
-            if i % self.print_freq == 0:
-                self.writer.add_scalar('Loss/gaze', losses_gaze.avg, self.train_iter)
+            if i  == 0:
+                self.logger.info("angle Error/train: %s  {:.3f} - L1 loss: {:.5f} ".format(errors.avg, losses_gaze.avg))
+
 
             # report information
             if i % self.print_freq == 0 and i != 0:
@@ -138,7 +201,7 @@ class Trainer(object):
                 est_time = (self.epochs - epoch) * (self.num_train / self.batch_size) * (batch_time.avg /self.print_freq)/ 60.0
                 print('Estimated training time left: ', np.round(est_time), ' mins')
 
-                self.writer.add_scalar('Error/train', errors.avg, self.train_iter)
+                self.logger.info("angle Error/train: %s  {:.3f} - L1 loss: {:.5f} ".format(errors.avg, losses_gaze.avg))
 
                 errors.reset()
                 losses_gaze.reset()
@@ -149,7 +212,7 @@ class Trainer(object):
         batch_time.update(toc-tic)
 
         print('running time is ', batch_time.avg)
-        return errors.avg, losses_gaze.avg
+        return epoch_errors.avg, epoch_losses.avg #返回的不再是最后的
 
     def test(self):
         """
@@ -190,6 +253,7 @@ class Trainer(object):
                 x, y = pred_gaze_all[i]
                 f.write(f"{x} {y}\n")
         print('save predictions to ', result_path)
+        # self.logger.removeFilter(self.logger.handlers[0])
 
     @staticmethod
     def _load_keyed(path):
@@ -251,11 +315,20 @@ class Trainer(object):
         """
         Save the latest copy of the model (overwrites the previous epoch).
         """
-        filename = 'last_ckpt.pth.tar'
-        ckpt_path = self.ckpt_dir/filename
-        torch.save(state, ckpt_path)
+        print("start save checkpoint")
+        if (state["epoch"] + 1) % self.save_freq == 0:
+            #改成隔几个epoch保存一次
+            filename = f'epoch_{state["epoch"]}_ckpt.pth.tar'
+            ckpt_path = self.ckpt_dir/filename
+            torch.save(state, ckpt_path)
+            print('save file to: ', ckpt_path)
 
-        print('save file to: ', ckpt_path)
+        #一直覆盖保留最新的，使得单独test可以读最后，中间val也可以读中间产物
+        last_ckpt_path = self.ckpt_dir/"last_ckpt.pth.tar"
+        torch.save(state, last_ckpt_path)
+        print('save checkpoint to: ', last_ckpt_path)
+        self.logger.info("save checkpoint to: {}".format(last_ckpt_path))
+
 
     def load_checkpoint(self, input_file_path='./ckpt/ckpt.pth.tar', is_strict=True):
         """
@@ -272,3 +345,52 @@ class Trainer(object):
             "[*] Loaded {} checkpoint @ epoch {}".format(
                 input_file_path, ckpt['epoch'])
         )
+
+    def set_val_loader(self, val_loader):
+        if not self.is_train:
+            raise RuntimeError("Cannot set validation loader in test mode.")
+        if not self.enable_val:
+            raise RuntimeError("Validation loader is not enabled in the configuration.")
+        self.val_loader = val_loader
+
+    def validate(self):
+        if not hasattr(self, 'val_loader'):
+            raise RuntimeError("Validation loader has not been set. Call set_val_loader() first.")
+
+        print("\n[*] Validate on {} samples".format(len(self.val_loader.dataset)))
+        self.model.eval()
+        losses = AverageMeter()
+        errs, preds, gts = [], [], []
+
+        with torch.no_grad():
+            for i, (input_img, target) in enumerate(self.val_loader):
+                input_var = torch.autograd.Variable(input_img.float().cuda())
+                target_var = torch.autograd.Variable(target.float().cuda())
+
+                pred_gaze = self.model(input_var)
+                losses.update(F.l1_loss(pred_gaze, target_var).item(), input_var.size()[0])
+
+                pred = pred_gaze.cpu().data.numpy()
+                gt = target_var.cpu().data.numpy()
+                errs.append(angular_error(pred, gt))
+                preds.append(pred)
+                gts.append(gt)
+
+        err = np.concatenate(errs)
+        pred = np.concatenate(preds)
+        gt = np.concatenate(gts)
+        rad_to_deg = 180.0 / np.pi
+
+        metrics = {
+            "val_loss": losses.avg,
+            "val_ang_mean": float(err.mean()),
+            "val_pitch_err_mean": float(np.abs(pred[:, 0] - gt[:, 0]).mean() * rad_to_deg),
+            "val_yaw_err_mean": float(np.abs(pred[:, 1] - gt[:, 1]).mean() * rad_to_deg),
+            "val_ang_median": float(np.median(err)),
+            "val_ang_p90": float(np.percentile(err, 90)),
+            "val_acc@5": float((err < 5).mean()),
+            "val_acc@10": float((err < 10).mean()),
+            "val_acc@25": float((err < 25).mean()),
+        }
+        self.logger.info('Validation: %s', metrics)
+        return metrics
