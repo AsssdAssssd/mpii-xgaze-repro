@@ -9,7 +9,7 @@ import yaml
 
 from trainer import Trainer
 from data_loader import get_train_loader, get_test_loader,get_loo_loader,get_val_loader
-
+from utils import notify
 
 def load_config(config_path, mode,is_loo):
     with open(config_path) as f:
@@ -90,16 +90,23 @@ def run(config,is_train):
     batch_size = config["experiment"]["batch_size"]
 
     if is_train:
+        dataset_type = config["experiment"].get("dataset_type", "general")
         data_loader = get_train_loader(
-            data_dir, batch_size, is_shuffle=True, **kwargs)
+            data_dir, batch_size, is_shuffle=True,
+            dataset_type=dataset_type, **kwargs)
         trainer = Trainer(config, data_loader, is_train)
-        trainer.set_val_loader(get_val_loader(data_dir, batch_size, is_shuffle=False, **kwargs))
-        trainer.train()
+        trainer.set_val_loader(get_val_loader(
+            data_dir, batch_size, is_shuffle=False,
+            dataset_type=dataset_type, **kwargs))
+        trainer.train() 
+        notify(f"{config['experiment']['name']} with {config['train']['epochs']} epochs train has finished")
     # test只认两个参数：本exp的last_ckpt + config["test"]["test_dataset"]，输出到 exp/{name}/test/{test_dataset.name}_test_result
     else:
         test_dir = Path(config["test"]["test_dataset"])
         data_loader = get_test_loader(
-            test_dir, batch_size, is_shuffle=False, **kwargs)
+            test_dir, batch_size, is_shuffle=False,
+            dataset_type=config["test"].get("dataset_type", "general"),
+            **kwargs)
 
         exp_root = config["experiment"]["root"].format(name=config["experiment"]["name"])
         ckpt = str(Path(exp_root)/"train"/"weights"/"last_ckpt.pth.tar")
@@ -147,14 +154,17 @@ def run_loo(config,is_train):
     ori_root=config["experiment"]["root"].format(name=config["experiment"]["name"])
 
     if is_train:
-        train_data_loaders,test_data_loaders,full_test_loader,keys=get_loo_loader(data_dir, batch_size, **kwargs)
+        train_data_loaders,val_data_loaders,test_data_loaders,full_test_loader,keys=get_loo_loader(data_dir, batch_size, **kwargs)
         eval_result={}
         for i in range(len(train_data_loaders)):
             config["experiment"]["root"]=ori_root+"/train"+f"/fold_{i}"
+            if Path(config["experiment"]["root"]).exists():
+                print(f"fold_{i} has trained")
+                continue
             for sub in ("train/weights", "train/logs","test/output"):
                 Path(ori_root+"/train"+f"/fold_{i}", sub).mkdir(parents=True, exist_ok=True)
             trainer = Trainer(config, train_data_loaders[i], True)
-            trainer.set_val_loader(test_data_loaders[i])
+            trainer.set_val_loader(val_data_loaders[i])
             trainer.train()
 
             
@@ -164,10 +174,14 @@ def run_loo(config,is_train):
             tester.test()
             error,error_std=tester.evaluation(False)
             eval_result[f"fold_{i}"] = (error, error_std)
+            process_loo_eval_results(eval_result,keys,ori_root,"loo_eval_results")
+            notify(f"loo exp:{config['experiment']['name']} fold_{i} has finished")
+
         config["experiment"]["root"]=ori_root+"/train"+"/full"
         for sub in ("train/weights", "train/logs","test/output"):
-            Path(ori_root+"/full", sub).mkdir(parents=True, exist_ok=True)
+            Path(ori_root+"/train"+"/full", sub).mkdir(parents=True, exist_ok=True)
         full_trainer = Trainer(config, full_test_loader, True)
+        full_trainer.enable_val = False
         full_trainer.train()
         process_loo_eval_results(eval_result,keys,ori_root,"loo_eval_results")
 
@@ -203,17 +217,19 @@ if __name__ == '__main__':
     p.add_argument("--config", type=str)
     p.add_argument("--mode", choices=["train", "test"], default="train")
     p.add_argument("--loo",action="store_true")
-    #test的两个参数：CLI直传/config
+    #test的三个参数：CLI直传/config/dataset_typr
     p.add_argument("--test_dataset", default=None, type=str)
     p.add_argument("--pretrained_expname", default=None, type=str)
+    p.add_argument("--dataset_type",default=None,choices=['general','eve'],type =str)
     args = p.parse_args()
 
     if args.mode == "test":
         src = load_config(args.config, args.mode,args.loo) if args.config is not None else {}
         expname = args.pretrained_expname or src.get("test", {}).get("pretrained_expname")
         test_dataset = args.test_dataset or src.get("test", {}).get("test_dataset")
-        if not expname or not test_dataset:
-            p.error("test needs pretrained_expname and test_dataset: pass both, or give a --config with them")
+        dataset_type = args.dataset_type or src.get("test", {}).get("dataset_type")
+        if not expname or not test_dataset or not dataset_type:
+            p.error("test needs pretrained_expname and test_dataset and dataset_type: pass both, or give a --config with them")
 
         
         if not Path(f"./exp/{expname}").is_dir():
@@ -234,6 +250,7 @@ if __name__ == '__main__':
         config.setdefault("test", {})
         config["test"]["pretrained_expname"]=expname
         config["test"]["test_dataset"]=test_dataset
+        config["test"]["dataset_type"]=dataset_type
         with open(out_root/"config.yaml", "w") as f:
             yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
     else:

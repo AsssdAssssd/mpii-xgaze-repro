@@ -1,9 +1,10 @@
 experiment:
-  name: MPII_LOO_resnet18
+  name: EVE_resnet18
   root: ./exp/{name}
-  data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalized/normalized_dataset"
+  data_dir: "/home/zhongrui/datasets/EVE_dataset/eve_dataset"
   batch_size: 50
   num_workers: 5
+  dataset_type : eve
 
 train:
   backbone: resnet18 #'resnet18''resnet34''resnet50''resnet101''resnet152''resnext50_32x4d' 'resnext101_32x8d''wide_resnet50_2''wide_resnet101_2':
