@@ -120,7 +120,7 @@ def get_loo_loader(data_dir,
     # test set: the test set for cross-dataset and within-dataset evaluations
     # test_person_specific: evaluation subset for the person specific setting
     sub_folder_use = ''
-    train_loaders,test_loaders=[],[]
+    train_loaders,test_loaders,val_loaders=[],[],[]
     for i in range(len(keys)):
         train_set = GazeDataset(dataset_path=data_dir, keys_to_use=[k for k in keys if k != keys[i]], sub_folder=sub_folder_use,
                                 transform=trans, is_shuffle=True, is_load_label=True)
@@ -130,10 +130,14 @@ def get_loo_loader(data_dir,
         test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
         train_loaders.append(train_loader)
         test_loaders.append(test_loader)
+        val_set = GazeDataset(dataset_path=data_dir, keys_to_use=[keys[i]], sub_folder=sub_folder_use,
+                                transform=trans, is_shuffle=False, is_load_label=True)
+        val_loader = DataLoader(val_set, batch_size=batch_size, num_workers=num_workers)
+        val_loaders.append(val_loader)
     full_set = GazeDataset(dataset_path=data_dir, keys_to_use=keys, sub_folder=sub_folder_use,
                                     transform=trans, is_shuffle=True, is_load_label=True)
     full_test_loader = DataLoader(full_set, batch_size=batch_size, num_workers=num_workers)
-    return train_loaders,test_loaders,full_test_loader,keys
+    return train_loaders,val_loaders,test_loaders,full_test_loader,keys
 
 
 class GazeDataset(Dataset):

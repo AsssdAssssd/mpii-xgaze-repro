@@ -19,6 +19,6 @@ train:
 test:
   pretrained_expname: MPII_LOO
   test_dataset: "/home/zhongrui/datasets/xgaze_224" #含有test_train_split的数据集，用其中的test测试
-  
+
   
   

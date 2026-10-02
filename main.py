@@ -9,7 +9,7 @@ import yaml
 
 from trainer import Trainer
 from data_loader import get_train_loader, get_test_loader,get_loo_loader,get_val_loader
-
+from utils import notify
 
 def load_config(config_path, mode,is_loo):
     with open(config_path) as f:
@@ -90,16 +90,23 @@ def run(config,is_train):
     batch_size = config["experiment"]["batch_size"]
 
     if is_train:
+        dataset_type = config["experiment"].get("dataset_type", "general")
         data_loader = get_train_loader(
-            data_dir, batch_size, is_shuffle=True, **kwargs)
+            data_dir, batch_size, is_shuffle=True,
+            dataset_type=dataset_type, **kwargs)
         trainer = Trainer(config, data_loader, is_train)
-        trainer.set_val_loader(get_val_loader(data_dir, batch_size, is_shuffle=False, **kwargs))
-        trainer.train()
+        trainer.set_val_loader(get_val_loader(
+            data_dir, batch_size, is_shuffle=False,
+            dataset_type=dataset_type, **kwargs))
+        trainer.train() 
+        notify(f"{config['experiment']['name']} with {config['train']['epochs']} epochs train has finished")
     # test只认两个参数：本exp的last_ckpt + config["test"]["test_dataset"]，输出到 exp/{name}/test/{test_dataset.name}_test_result
     else:
         test_dir = Path(config["test"]["test_dataset"])
         data_loader = get_test_loader(
-            test_dir, batch_size, is_shuffle=False, **kwargs)
+            test_dir, batch_size, is_shuffle=False,
+            dataset_type=config["test"].get("dataset_type", "general"),
+            **kwargs)
 
         exp_root = config["experiment"]["root"].format(name=config["experiment"]["name"])
         ckpt = str(Path(exp_root)/"train"/"weights"/"last_ckpt.pth.tar")
@@ -147,14 +154,17 @@ def run_loo(config,is_train):
     ori_root=config["experiment"]["root"].format(name=config["experiment"]["name"])
 
     if is_train:
-        train_data_loaders,test_data_loaders,full_test_loader,keys=get_loo_loader(data_dir, batch_size, **kwargs)
+        train_data_loaders,val_data_loaders,test_data_loaders,full_test_loader,keys=get_loo_loader(data_dir, batch_size, **kwargs)
         eval_result={}
         for i in range(len(train_data_loaders)):
             config["experiment"]["root"]=ori_root+"/train"+f"/fold_{i}"
+            if Path(config["experiment"]["root"]).exists():
+                print(f"fold_{i} has trained")
+                continue
             for sub in ("train/weights", "train/logs","test/output"):
                 Path(ori_root+"/train"+f"/fold_{i}", sub).mkdir(parents=True, exist_ok=True)
             trainer = Trainer(config, train_data_loaders[i], True)
-            trainer.set_val_loader(test_data_loaders[i])
+            trainer.set_val_loader(val_data_loaders[i])
             trainer.train()
 
             
@@ -164,10 +174,14 @@ def run_loo(config,is_train):
             tester.test()
             error,error_std=tester.evaluation(False)
             eval_result[f"fold_{i}"] = (error, error_std)
+            process_loo_eval_results(eval_result,keys,ori_root,"loo_eval_results")
+            notify(f"loo exp:{config['experiment']['name']} fold_{i} has finished")
+
         config["experiment"]["root"]=ori_root+"/train"+"/full"
         for sub in ("train/weights", "train/logs","test/output"):
-            Path(ori_root+"/full", sub).mkdir(parents=True, exist_ok=True)
+            Path(ori_root+"/train"+"/full", sub).mkdir(parents=True, exist_ok=True)
         full_trainer = Trainer(config, full_test_loader, True)
+        full_trainer.enable_val = False
         full_trainer.train()
         process_loo_eval_results(eval_result,keys,ori_root,"loo_eval_results")
 

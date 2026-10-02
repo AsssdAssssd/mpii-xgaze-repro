@@ -46,7 +46,7 @@ class Trainer(object):
             self.save_freq = config["train"]["save_freq"]
            # configure tensorboard logging
             log_dir = self.root/"train"/"logs"
-            file_handler = logging.FileHandler(log_dir/f"{str(time.time()):.6f}.log")
+            file_handler = logging.FileHandler(log_dir/f"{str(time.time())}.log")
 
             self.enable_val = config["train"].get("enable_val", False)
             self.history = HistorySaver(log_dir)
@@ -56,7 +56,7 @@ class Trainer(object):
             self.num_test = len(self.test_loader.dataset)
             self.pre_trained_model_path = Path(config["test"]["pre_trained_model_path"].format(root=self.root,epochs=self.epochs))
             log_dir = self.root/"test"/"output"
-            file_handler = logging.FileHandler(log_dir/f"{str(time.time()):.6f}.log")
+            file_handler = logging.FileHandler(log_dir/f"{str(time.time())}.log")
             
             # self.logger.addHandler(logging.StreamHandler())
         file_handler.setFormatter(formatter)
@@ -132,7 +132,7 @@ class Trainer(object):
 
             val_time = 0.0
             val_metrics = {}
-            if self.enable_val == 0:
+            if self.enable_val:
                 val_tic = time.time()
                 val_metrics = self.validate()
                 val_time = time.time() - val_tic
