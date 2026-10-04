@@ -32,7 +32,7 @@ def get_val_loader(data_dir, batch_size, num_workers=4, is_shuffle=True,
 
 
 def get_test_loader(data_dir, batch_size, num_workers=4, is_shuffle=True,
-                    dataset_type="general"):
+                    dataset_type="general",load_label=True):
     return _TEST_LOADERS[dataset_type](data_dir, batch_size,
                                        num_workers=num_workers,
-                                       is_shuffle=is_shuffle)
+                                       is_shuffle=is_shuffle,load_label=load_label)

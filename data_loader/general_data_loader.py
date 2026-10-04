@@ -77,7 +77,7 @@ def get_val_loader(data_dir,
 def get_test_loader(data_dir,
                            batch_size,
                            num_workers=4,
-                           is_shuffle=True):
+                           is_shuffle=True,load_label=False):
     # load dataset
     refer_list_file =(Path(data_dir) /'train_test_split.json')
     if refer_list_file.exists():
@@ -94,7 +94,7 @@ def get_test_loader(data_dir,
     # test_person_specific: evaluation subset for the person specific setting
     sub_folder_use = 'test'
     test_set = GazeDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
-                           transform=trans, is_shuffle=is_shuffle, is_load_label=False)
+                           transform=trans, is_shuffle=is_shuffle, is_load_label=load_label)
     test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
 
     return test_loader
@@ -126,7 +126,7 @@ def get_loo_loader(data_dir,
                                 transform=trans, is_shuffle=True, is_load_label=True)
         train_loader = DataLoader(train_set, batch_size=batch_size, num_workers=num_workers)
         test_set = GazeDataset(dataset_path=data_dir, keys_to_use=[keys[i]], sub_folder=sub_folder_use,
-                                transform=trans, is_shuffle=False, is_load_label=False)
+                                transform=trans, is_shuffle=False, is_load_label=True)#由于不是真的test，给true了
         test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
         train_loaders.append(train_loader)
         test_loaders.append(test_loader)

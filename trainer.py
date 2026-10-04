@@ -57,7 +57,8 @@ class Trainer(object):
             self.pre_trained_model_path = Path(config["test"]["pre_trained_model_path"].format(root=self.root,epochs=self.epochs))
             log_dir = self.root/"test"/"output"
             file_handler = logging.FileHandler(log_dir/f"{str(time.time())}.log")
-            
+            self.eval=False
+            self.predict_error=[]
             # self.logger.addHandler(logging.StreamHandler())
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.DEBUG)
@@ -214,28 +215,32 @@ class Trainer(object):
         print('running time is ', batch_time.avg)
         return epoch_errors.avg, epoch_losses.avg #返回的不再是最后的
 
-    def test(self):
+    def test(self,eval=False):
         """
         Test the pre-treained model on the whole test set. Note there is no label released to public, you can
         only save the predicted results. You then need to submit the test resutls to our evaluation website to
         get the final gaze estimation error.
         """
+        self.eval=eval
         print('test')
         self.model.eval()
         self.load_checkpoint(is_strict=False, input_file_path=self.pre_trained_model_path)
-        pred_gaze_all = np.zeros((self.num_test, 2))
-        save_index = 0
+        pred_gaze_all = []
 
         print('Testing on ', self.num_test, ' samples')
-        for i, (input_img) in enumerate(self.test_loader):
-            input_var = torch.autograd.Variable(input_img.float().cuda())
-            pred_gaze = self.model(input_var)
-            pred_gaze_all[save_index:save_index+self.batch_size, :] = pred_gaze.cpu().data.numpy()
-            save_index += input_var.size(0)
+        if eval:
+            for i, (input_img,label) in enumerate(self.test_loader):
+                input_var = torch.autograd.Variable(input_img.float().cuda())
+                pred_gaze = self.model(input_var)
+                pred_gaze_all.append(pred_gaze.cpu().data.numpy())
+                self.predict_error.append(angular_error(pred_gaze.cpu().data.numpy(), label.cpu().data.numpy()))
+        else:
+            for i, (input_img) in enumerate(self.test_loader):
+                input_var = torch.autograd.Variable(input_img.float().cuda())
+                pred_gaze = self.model(input_var)
+                pred_gaze_all.append(pred_gaze.cpu().data.numpy())
 
-        if save_index != self.num_test:
-            print('the test samples save_index ', save_index, ' is not equal to the whole test set ', self.num_test)
-
+        pred_gaze_all = np.concatenate(pred_gaze_all, axis=0)
         print('Tested on : ', pred_gaze_all.shape[0], ' samples')
 
         # save predictions grouped by key: a "key:<h5 filename>" header line
@@ -255,55 +260,20 @@ class Trainer(object):
         print('save predictions to ', result_path)#这个应该封装到loader里面了，，，思考
         # self.logger.removeFilter(self.logger.handlers[0])
 
-    @staticmethod
-    def _load_keyed(path):
-        """Read header + rows, returning {key: np.array([[x, y], ...])}.
-
-        Header may be written as either "<name>:" or "key:<name>".
-        """
-        data = {}
-        cur_key = None
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                if line.endswith(':'):
-                    cur_key = line[:-1].strip()
-                    data.setdefault(cur_key, [])
-                else:
-                    data[cur_key].append([float(v) for v in line.split()])
-        return {k: np.asarray(v, dtype=np.float64) for k, v in data.items()}
 
     def evaluation(self, write=True):
-        output_dir = self.root/"test"/"output"
-
-        print('now we begin')
-
-        print('loading truth from the source h5')
-        truth = self.test_loader.dataset.get_labels_keyed()
-
-        print('loading submission file')
-        submission = self._load_keyed(output_dir/"test_results.txt")
-
-        print('now compute the gaze error')
-        errors = []
-        for key, pred in submission.items():
-            if key not in truth:
-                print(f'[warn] {key} not found in truth file, skip')
-                continue
-            gt = truth[key]
-            if gt.shape[0] != pred.shape[0]:
-                print(f'[warn] {key}: pred {pred.shape[0]} rows vs truth {gt.shape[0]} rows, skip')
-                continue
-            errors.append(angular_error(pred, gt))
-        error_all = np.concatenate(errors)
-
-        error = np.mean(error_all)
-        error_std = np.std(error_all)
+        if not self.eval:
+            print("Your test loader not load label,can't evaluate")
+            return 
+        if not self.predict_error :
+            print("You haven't test/predict!")
+            return
+        self.predict_error=np.concatenate(self.predict_error)
+        error = np.mean(self.predict_error)
+        error_std = np.std(self.predict_error)
         
         if write:
-            output_filename = output_dir/'eva_scores.txt'
+            output_filename = self.root/"test"/"output"/'eva_scores.txt'
             with open(output_filename, 'w') as output_file:
                 output_file.write("gaze_error: %0.4f\n" % error)
                 output_file.write("gaze_error_std: %0.4f\n" % error_std)

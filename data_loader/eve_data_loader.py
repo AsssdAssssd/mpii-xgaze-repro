@@ -144,8 +144,8 @@ def get_eve_val_loader(data_dir, batch_size, num_workers=4, is_shuffle=True):
     return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers)
 
 
-def get_eve_test_loader(data_dir, batch_size, num_workers=4, is_shuffle=True):
+def get_eve_test_loader(data_dir, batch_size, num_workers=4, is_shuffle=True,load_label=False):
     dataset = EveDataset(data_dir, split=("val",), shuffle=is_shuffle,
-                         is_load_label=False)
+                         is_load_label=load_label)
     return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, drop_last=True)
 

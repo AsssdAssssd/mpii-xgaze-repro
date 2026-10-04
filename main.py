@@ -105,7 +105,7 @@ def run(config,is_train):
         test_dir = Path(config["test"]["test_dataset"])
         data_loader = get_test_loader(
             test_dir, batch_size, is_shuffle=False,
-            dataset_type=config["test"].get("dataset_type", "general"),
+            dataset_type=config["test"].get("dataset_type", "general"),load_label=True
             **kwargs)
 
         exp_root = config["experiment"]["root"].format(name=config["experiment"]["name"])
@@ -117,7 +117,7 @@ def run(config,is_train):
         (out_root/"test"/"output").mkdir(parents=True, exist_ok=True)
 
         trainer = Trainer(config, data_loader, False)
-        trainer.test()
+        trainer.test(eval=True)
         trainer.evaluation(True)
 
 
@@ -171,7 +171,7 @@ def run_loo(config,is_train):
             config["test"]["pre_trained_model_path"] = str(
                 Path(config["experiment"]["root"])/"train"/"weights"/"last_ckpt.pth.tar")
             tester = Trainer(config, test_data_loaders[i], False)
-            tester.test()
+            tester.test(eval=True)
             error,error_std=tester.evaluation(False)
             eval_result[f"fold_{i}"] = (error, error_std)
             process_loo_eval_results(eval_result,keys,ori_root,"loo_eval_results")
@@ -189,7 +189,7 @@ def run_loo(config,is_train):
     else:
         test_dir = Path(config["test"]["test_dataset"])
         data_loader = get_test_loader(
-            test_dir, batch_size, is_shuffle=False, **kwargs)
+            test_dir, batch_size, is_shuffle=False, load_label=True,**kwargs)
 
         out_root = Path(ori_root)/"test"/f"{test_dir.name}_test_result"
         out_root.mkdir(parents=True, exist_ok=True)
@@ -206,7 +206,7 @@ def run_loo(config,is_train):
             (out_root/i.name/"test"/"output").mkdir(parents=True, exist_ok=True)
 
             trainer = Trainer(config, data_loader, False)
-            trainer.test()
+            trainer.test(eval=True)
             error,error_std=trainer.evaluation(True)
             eval_result[i.name] = (error, error_std)
         process_loo_eval_results(eval_result,None,out_root,f"{test_dir.name}_eval_results")
@@ -262,3 +262,6 @@ if __name__ == '__main__':
         run_loo(config,args.mode=="train")
     else:
         run(config,args.mode=="train")
+
+#考虑到当前的test实质上都是val，所以直接在此处获取的时候直接val（loader里面有label），主要先test再去对应找label好麻烦，，，
+#改的地方是test（eval=true）
