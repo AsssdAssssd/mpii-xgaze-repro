@@ -105,7 +105,7 @@ def run(config,is_train):
         test_dir = Path(config["test"]["test_dataset"])
         data_loader = get_test_loader(
             test_dir, batch_size, is_shuffle=False,
-            dataset_type=config["test"].get("dataset_type", "general"),load_label=True
+            dataset_type=config["test"].get("dataset_type", "general"),load_label=True,
             **kwargs)
 
         exp_root = config["experiment"]["root"].format(name=config["experiment"]["name"])
@@ -188,8 +188,10 @@ def run_loo(config,is_train):
     # loo test：用外部test_dataset跑fold*+full全部权重，每模型一个子目录，最后汇总
     else:
         test_dir = Path(config["test"]["test_dataset"])
-        data_loader = get_test_loader(
-            test_dir, batch_size, is_shuffle=False, load_label=True,**kwargs)
+        data_loader =get_test_loader(
+            test_dir, batch_size, is_shuffle=False,
+            dataset_type=config["test"].get("dataset_type", "general"),load_label=True,
+            **kwargs)
 
         out_root = Path(ori_root)/"test"/f"{test_dir.name}_test_result"
         out_root.mkdir(parents=True, exist_ok=True)

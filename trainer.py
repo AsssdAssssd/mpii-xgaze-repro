@@ -244,20 +244,20 @@ class Trainer(object):
         print('Tested on : ', pred_gaze_all.shape[0], ' samples')
 
         # save predictions grouped by key: a "key:<h5 filename>" header line
-        # followed by the "x y" lines belonging to that key
-        dataset = self.test_loader.dataset
-        result_path = self.root/"test"/"output"/"test_results.txt"
-        with open(result_path, 'w') as f:
-            cur_key = None
-            for i in range(self.num_test):
-                key_idx, _ = dataset.idx_to_kv[i]
-                filename = dataset.selected_keys[key_idx]
-                if filename != cur_key:
-                    f.write(f"{filename}:\n")
-                    cur_key = filename
-                x, y = pred_gaze_all[i]
-                f.write(f"{x} {y}\n")
-        print('save predictions to ', result_path)#这个应该封装到loader里面了，，，思考
+        # # followed by the "x y" lines belonging to that key
+        # dataset = self.test_loader.dataset
+        # result_path = self.root/"test"/"output"/"test_results.txt"
+        # with open(result_path, 'w') as f:
+        #     cur_key = None
+        #     for i in range(self.num_test):
+        #         key_idx, _ = dataset.idx_to_kv[i]
+        #         filename = dataset.selected_keys[key_idx]
+        #         if filename != cur_key:
+        #             f.write(f"{filename}:\n")
+        #             cur_key = filename
+        #         x, y = pred_gaze_all[i]
+        #         f.write(f"{x} {y}\n")
+        # print('save predictions to ', result_path)#这个应该封装到loader里面了，，，思考
         # self.logger.removeFilter(self.logger.handlers[0])
 
 

@@ -3,7 +3,7 @@ paths:
   input_root: /home/zhongrui/datasets/EVE_dataset/eve_dataset
   # null -> <parent of input_root>/<INPUT_ROOT uppercase>_normalized
   output_root: null
-  face_model: configs/face_model/xgaze_face_model.txt
+  face_model: preprocessing/face_model/xgaze_face_model.txt
   landmark_predictor: modules/shape_predictor_68_face_landmarks.dat
 
 filter:
@@ -17,7 +17,7 @@ options:
   rotated_mesh_vis: False
   viz_per_subject: 0
   overwrite: false
-  steps: 30               #pre n frames process once
+  steps: 10               #pre n frames process once
 
 runtime:
   subjects: ""           # comma list, empty = all train*/val*/test* dirs
