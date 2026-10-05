@@ -42,7 +42,7 @@ def get_train_loader(data_dir,
     # test set: the test set for cross-dataset and within-dataset evaluations
     # test_person_specific: evaluation subset for the person specific setting
     sub_folder_use = 'train'
-    train_set = GazeDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
+    train_set = MPIIDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
                             transform=trans, is_shuffle=is_shuffle, is_load_label=True)
     train_loader = DataLoader(train_set, batch_size=batch_size, num_workers=num_workers)
 
@@ -67,7 +67,7 @@ def get_val_loader(data_dir,
     # test set: the test set for cross-dataset and within-dataset evaluations
     # test_person_specific: evaluation subset for the person specific setting
     sub_folder_use = 'val'
-    val_set = GazeDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
+    val_set = MPIIDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
                           transform=trans, is_shuffle=is_shuffle, is_load_label=True)
     val_loader = DataLoader(val_set, batch_size=batch_size, num_workers=num_workers)
 
@@ -93,7 +93,7 @@ def get_test_loader(data_dir,
     # test set: the test set for cross-dataset and within-dataset evaluations
     # test_person_specific: evaluation subset for the person specific setting
     sub_folder_use = 'test'
-    test_set = GazeDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
+    test_set = MPIIDataset(dataset_path=data_dir, keys_to_use=datastore[sub_folder_use], sub_folder=sub_folder_use,
                            transform=trans, is_shuffle=is_shuffle, is_load_label=load_label)
     test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
 
@@ -122,25 +122,25 @@ def get_loo_loader(data_dir,
     sub_folder_use = ''
     train_loaders,test_loaders,val_loaders=[],[],[]
     for i in range(len(keys)):
-        train_set = GazeDataset(dataset_path=data_dir, keys_to_use=[k for k in keys if k != keys[i]], sub_folder=sub_folder_use,
+        train_set = MPIIDataset(dataset_path=data_dir, keys_to_use=[k for k in keys if k != keys[i]], sub_folder=sub_folder_use,
                                 transform=trans, is_shuffle=True, is_load_label=True)
         train_loader = DataLoader(train_set, batch_size=batch_size, num_workers=num_workers)
-        test_set = GazeDataset(dataset_path=data_dir, keys_to_use=[keys[i]], sub_folder=sub_folder_use,
+        test_set = MPIIDataset(dataset_path=data_dir, keys_to_use=[keys[i]], sub_folder=sub_folder_use,
                                 transform=trans, is_shuffle=False, is_load_label=True)#由于不是真的test，给true了
         test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
         train_loaders.append(train_loader)
         test_loaders.append(test_loader)
-        val_set = GazeDataset(dataset_path=data_dir, keys_to_use=[keys[i]], sub_folder=sub_folder_use,
+        val_set = MPIIDataset(dataset_path=data_dir, keys_to_use=[keys[i]], sub_folder=sub_folder_use,
                                 transform=trans, is_shuffle=False, is_load_label=True)
         val_loader = DataLoader(val_set, batch_size=batch_size, num_workers=num_workers)
         val_loaders.append(val_loader)
-    full_set = GazeDataset(dataset_path=data_dir, keys_to_use=keys, sub_folder=sub_folder_use,
+    full_set = MPIIDataset(dataset_path=data_dir, keys_to_use=keys, sub_folder=sub_folder_use,
                                     transform=trans, is_shuffle=True, is_load_label=True)
     full_test_loader = DataLoader(full_set, batch_size=batch_size, num_workers=num_workers)
     return train_loaders,val_loaders,test_loaders,full_test_loader,keys
 
 
-class GazeDataset(Dataset):
+class MPIIDataset(Dataset):
     def __init__(self, dataset_path: str, keys_to_use: List[str] = None, sub_folder='', transform=None, is_shuffle=True,
                  index_file=None, is_load_label=True):
         self.path = dataset_path
@@ -191,9 +191,9 @@ class GazeDataset(Dataset):
                 self.hdfs[num_i] = None
 
     def __getitem__(self, idx):
-        key, idx = self.idx_to_kv[idx]
+        sub_idx, idx = self.idx_to_kv[idx]
 
-        self.hdf = h5py.File(Path(self.path)/self.sub_folder/self.selected_keys[key], 'r', swmr=True)
+        self.hdf = h5py.File(Path(self.path)/self.sub_folder/self.selected_keys[sub_idx], 'r', swmr=True)
         assert self.hdf.swmr_mode
 
         # Get face image
@@ -201,13 +201,19 @@ class GazeDataset(Dataset):
         image = image[:, :, [2, 1, 0]]  # from BGR to RGB
         image = self.transform(image)
 
+        subj=self.hdf['subject'].asstr()[idx]
+        data=self.hdf['data'].asstr()[idx]
+        index=self.hdf['index'].asstr()[idx]
+        key=f"{subj}/{data}/{index}"
+
+
         # Get labels
         if self.is_load_label:
             gaze_label = self.hdf['face_gaze'][idx, :]
             gaze_label = gaze_label.astype('float')
-            return image, gaze_label
+            return key,image, gaze_label
         else:
-            return image
+            return key,image
 
     def get_labels_keyed(self):
         # eval用：从源h5里读face_gaze，{key: (n,2)}，行序与h5原生顺序一致

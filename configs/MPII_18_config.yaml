@@ -4,6 +4,7 @@ experiment:
   data_dir: "/home/zhongrui/datasets/MPIIFACEGAZE_normalized/normalized_dataset"
   batch_size: 50
   num_workers: 5
+  dataset_type : mpii
 
 train:
   backbone: resnet18 #'resnet18''resnet34''resnet50''resnet101''resnet152''resnext50_32x4d' 'resnext101_32x8d''wide_resnet50_2''wide_resnet101_2':
@@ -17,7 +18,7 @@ train:
 
 
 test:
-  dataset_type: 'general'
+  dataset_type: 'mpii'
   pretrained_expname: MPII_LOO
   test_dataset: "/home/zhongrui/datasets/xgaze_224" #含有test_train_split的数据集，用其中的test测试
 

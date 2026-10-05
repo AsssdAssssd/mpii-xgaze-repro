@@ -11,7 +11,7 @@ class EVE:
 
     def __init__(self, cfg):
         self.root = Path(cfg["paths"]["input_root"]).resolve()#有test/train的那个目录
-        self.steps=cfg["options"]["steps"]
+        self.hz=cfg["options"]["target_hz"]
         subjects = [s.strip() for s in str(cfg["runtime"].get("subjects") or "").split(",")
                     if s.strip()]
         full_subjects = []
@@ -42,10 +42,10 @@ class EVE:
                 video_path = step_dir/f"{cam}.mp4"
                 if not h5_path.is_file() or not video_path.is_file():
                     continue
-                for sample in self._single_camera_samples(subj, step_dir, cam, h5_path, video_path):
+                for sample in self._single_camera_samples(subj, step_dir, cam, h5_path, video_path,cam=="basler"):
                     yield sample
 
-    def _single_camera_samples(self, subj, step_dir, cam, h5_path, video_path):
+    def _single_camera_samples(self, subj, step_dir, cam, h5_path, video_path,is_basler=False):
         with h5py.File(h5_path, "r") as h5:
             camera = np.array(h5["camera_matrix"][:], dtype=np.float64)
             screen_to_cam = np.array(h5["camera_transformation"][:], dtype=np.float64)
@@ -56,14 +56,17 @@ class EVE:
             face_o = self._read(h5, "face_o")
 
         cap = cv2.VideoCapture(str(video_path))
+        step=int(60/self.hz) if is_basler else int(30/self.hz)
         try:
             for i in range(n):
-                if i%self.steps or i==0:
+                if not cap.grab():
+                    break
+                if i%step or i==0:
                     continue
                 
-                ok, frame = cap.read()
+                ok, frame = cap.retrieve()
                 if not ok:
-                    break
+                    continue
 
                 gaze_dir = self._gaze_dir(i, pog, face_o,
                                           screen_to_cam, mm_per_px)#这里单位mm
@@ -71,11 +74,17 @@ class EVE:
                     continue
 
                 yield {
-                    "key": f"{subj}/{cam}/{step_dir.name}/{i:07d}",
+                    "key": f"{subj}/{step_dir.name}/{cam}/{i:07d}",
                     "image": frame,
                     "camera": camera,
                     "distortion": np.zeros((5, 1), dtype=np.float64),
                     "gaze_dir": gaze_dir,
+                    "kwargs":{
+                        "subject":subj,
+                        "step_dir":step_dir.name,
+                        "camera":cam,
+                        "index":f"frame_{i:07d}"
+                    }
                 }
         finally:
             cap.release()

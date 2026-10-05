@@ -164,7 +164,7 @@ class Trainer(object):
         epoch_losses = AverageMeter()
 
         tic = time.time()
-        for i, (input_img, target) in enumerate(data_loader):
+        for i, (key,input_img, target) in enumerate(data_loader):
             input_var = torch.autograd.Variable(input_img.float().cuda())
             target_var = torch.autograd.Variable(target.float().cuda())
 
@@ -225,40 +225,32 @@ class Trainer(object):
         print('test')
         self.model.eval()
         self.load_checkpoint(is_strict=False, input_file_path=self.pre_trained_model_path)
-        pred_gaze_all = []
+        pred_gaze_all,keys = [],[]
 
         print('Testing on ', self.num_test, ' samples')
         if eval:
-            for i, (input_img,label) in enumerate(self.test_loader):
+            for i, (key,input_img,label) in enumerate(self.test_loader):
                 input_var = torch.autograd.Variable(input_img.float().cuda())
                 pred_gaze = self.model(input_var)
                 pred_gaze_all.append(pred_gaze.cpu().data.numpy())
                 self.predict_error.append(angular_error(pred_gaze.cpu().data.numpy(), label.cpu().data.numpy()))
+                keys.append(key)
         else:
-            for i, (input_img) in enumerate(self.test_loader):
+            for i, (key,input_img) in enumerate(self.test_loader):
                 input_var = torch.autograd.Variable(input_img.float().cuda())
                 pred_gaze = self.model(input_var)
                 pred_gaze_all.append(pred_gaze.cpu().data.numpy())
+                keys.append(key)
 
         pred_gaze_all = np.concatenate(pred_gaze_all, axis=0)
         print('Tested on : ', pred_gaze_all.shape[0], ' samples')
 
-        # save predictions grouped by key: a "key:<h5 filename>" header line
-        # # followed by the "x y" lines belonging to that key
-        # dataset = self.test_loader.dataset
-        # result_path = self.root/"test"/"output"/"test_results.txt"
-        # with open(result_path, 'w') as f:
-        #     cur_key = None
-        #     for i in range(self.num_test):
-        #         key_idx, _ = dataset.idx_to_kv[i]
-        #         filename = dataset.selected_keys[key_idx]
-        #         if filename != cur_key:
-        #             f.write(f"{filename}:\n")
-        #             cur_key = filename
-        #         x, y = pred_gaze_all[i]
-        #         f.write(f"{x} {y}\n")
-        # print('save predictions to ', result_path)#这个应该封装到loader里面了，，，思考
-        # self.logger.removeFilter(self.logger.handlers[0])
+        result_path = self.root/"test"/"output"/"test_results.txt"
+        with open(result_path, 'w') as f:
+            for key,(x,y) in zip(keys,pred_gaze_all):
+                f.write(f"{key}: {x} {y}\n")
+        print('save predictions to ', result_path)#这个应该封装到loader里面了，，，思考
+        self.logger.removeFilter(self.logger.handlers[0])
 
 
     def evaluation(self, write=True):
@@ -333,7 +325,7 @@ class Trainer(object):
         errs, preds, gts = [], [], []
 
         with torch.no_grad():
-            for i, (input_img, target) in enumerate(self.val_loader):
+            for i, (key,input_img, target) in enumerate(self.val_loader):
                 input_var = torch.autograd.Variable(input_img.float().cuda())
                 target_var = torch.autograd.Variable(target.float().cuda())
 

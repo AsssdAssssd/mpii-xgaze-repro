@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 
-from .general_data_loader import trans
+from .xgaze_data_loader import trans
 
 CAMERA_FPS = {"basler": 60, "webcam_l": 30, "webcam_c": 30, "webcam_r": 30}
 CAMERAS = tuple(CAMERA_FPS)
@@ -125,12 +125,14 @@ class EveDataset(IterableDataset):
         if self.shuffle:
             rng.shuffle(samples)#视频内打乱
 
+        rel = h5_path.relative_to(self.root).as_posix()  # train01/step01/basler.h5
         for i, frame in samples:
             img = self._to_tensor(frame)
+            key = f"{rel}:{i:07d}"
             if self.is_load_label:
-                yield img, torch.from_numpy(gaze[i])
+                yield key, img, torch.from_numpy(gaze[i])
             else:
-                yield img
+                yield key, img
 
 
 def get_eve_train_loader(data_dir, batch_size, num_workers=4, is_shuffle=True):

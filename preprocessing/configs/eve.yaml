@@ -13,11 +13,10 @@ filter:
   skip_undistort: true   # EVE ships no distortion model; must stay true
 
 options:
-  save_landmarks: true   # write landmarks/<subj>.csv
   rotated_mesh_vis: False
   viz_per_subject: 0
   overwrite: false
-  steps: 10               #pre n frames process once
+  target_hz: 5 #hz               #pre 60(or 30)/n frames process once
 
 runtime:
   subjects: ""           # comma list, empty = all train*/val*/test* dirs

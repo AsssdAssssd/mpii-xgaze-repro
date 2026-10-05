@@ -25,7 +25,7 @@ def load_config(config_path, mode,is_loo):
     root= Path(project_root)
     root.mkdir(parents=True,exist_ok=True)
 
-    # loo train 细节run里面建
+    # loo train 创建等run里面建
     if is_loo:
         archived = Path(project_root)/"config.yaml"
         shutil.copy(config_path, archived)
@@ -90,7 +90,7 @@ def run(config,is_train):
     batch_size = config["experiment"]["batch_size"]
 
     if is_train:
-        dataset_type = config["experiment"].get("dataset_type", "general")
+        dataset_type = config["experiment"].get("dataset_type", "xgaze")
         data_loader = get_train_loader(
             data_dir, batch_size, is_shuffle=True,
             dataset_type=dataset_type, **kwargs)
@@ -105,7 +105,7 @@ def run(config,is_train):
         test_dir = Path(config["test"]["test_dataset"])
         data_loader = get_test_loader(
             test_dir, batch_size, is_shuffle=False,
-            dataset_type=config["test"].get("dataset_type", "general"),load_label=True,
+            dataset_type=config["test"].get("dataset_type", "xgaze"),load_label=True,
             **kwargs)
 
         exp_root = config["experiment"]["root"].format(name=config["experiment"]["name"])
@@ -190,7 +190,7 @@ def run_loo(config,is_train):
         test_dir = Path(config["test"]["test_dataset"])
         data_loader =get_test_loader(
             test_dir, batch_size, is_shuffle=False,
-            dataset_type=config["test"].get("dataset_type", "general"),load_label=True,
+            dataset_type=config["test"].get("dataset_type", "xgaze"),load_label=True,
             **kwargs)
 
         out_root = Path(ori_root)/"test"/f"{test_dir.name}_test_result"
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     #test的三个参数：CLI直传/config/dataset_typr
     p.add_argument("--test_dataset", default=None, type=str)
     p.add_argument("--pretrained_expname", default=None, type=str)
-    p.add_argument("--dataset_type",default=None,choices=['general','eve'],type =str)
+    p.add_argument("--dataset_type",default=None,choices=['xgaze','eve','mpii'],type =str)
     args = p.parse_args()
 
     if args.mode == "test":

@@ -21,18 +21,17 @@ import numpy as np
 from core.detect import Detecter
 from core import pnp
 from core import preview as viz
-from core.writers import H5Writer, write_failed, write_landmarks_csv
+from writer.writers import  write_failed
 
 OUTPUT_SUBDIRS = (
     "normalized_dataset",  # <subj>.h5
     "failed",              # <subj>_rejected.txt
-    "landmarks",           # <subj>.csv
     "rotated_mesh_vis",    # <key>.txt, optional
     "viz",                 # <subj>_viz.jpg, optional
 )
 
 class Pipeline:
-    def __init__(self,cfg,dataset):
+    def __init__(self,cfg,dataset,writer_class):
         self.paths, self.flt, self.opt, self.rt = cfg["paths"], cfg["filter"], cfg["options"], cfg["runtime"]
         self.dataset=dataset
         out_root = self.paths.get("output_root")
@@ -53,7 +52,6 @@ class Pipeline:
         self.conf = self.flt.get("conf", 0.5)
     
         self.overwrite = self.opt.get("overwrite", False)
-        self.save_lm = self.opt.get("save_landmarks", True)
         self.need_mesh = bool(self.opt.get("rotated_mesh_vis", False))
         self.viz_n = self.opt.get("viz_per_subject", 0) or 0
         self.need_viz = self.viz_n > 0
@@ -67,8 +65,6 @@ class Pipeline:
         self.dirs["failed"].mkdir(parents=True, exist_ok=True)
         self.dirs["normalized_dataset"].mkdir(parents=True, exist_ok=True)
     
-        if self.save_lm:
-            self.dirs["landmarks"].mkdir(parents=True, exist_ok=True)
         if self.need_mesh:
             self.dirs["rotated_mesh_vis"].mkdir(parents=True, exist_ok=True)
         if self.need_viz:
@@ -77,6 +73,7 @@ class Pipeline:
 
         #detecter
         self.detecter=Detecter(self.paths["landmark_predictor"])
+        self.writer_class=writer_class
         
     def run(self):
         for subj in self.dataset.subjects():
@@ -94,8 +91,8 @@ class Pipeline:
                 print(f"[{subj}] no samples, skip", flush=True)
                 continue
 
-            self.writer = H5Writer(h5_path)
-            self.lm_rows, self.rejected, self.viz_rows = [], [], []
+            self.writer = self.writer_class(h5_path)
+            self.rejected, self.viz_rows =  [], []
 
             #process one step with batch
             print(f"[{subj}] processing ...", flush=True)
@@ -113,14 +110,12 @@ class Pipeline:
             self.process_batch(batch,len(batch))
 
             #save
-            if self.save_lm:
-                write_landmarks_csv(self.dirs["landmarks"]/f"{subj}.csv", self.lm_rows)
             if self.need_viz and self.viz_rows:
                 viz.save_montage(self.dirs["viz"], subj, self.viz_rows)
             write_failed(self.dirs["failed"]/f"{subj}_rejected.txt", self.rejected)
             self.writer.close()
             #progress
-            print(f"[{subj}] kept={self.writer.n} rejected={len(self.rejected)} "
+            print(f"[{subj}] kept={len(self.writer)} rejected={len(self.rejected)} "
                 f"{time.time() - t0:.0f}s -> {h5_path}", flush=True)
 
 
@@ -136,8 +131,6 @@ class Pipeline:
             if pts is None:
                 self.rejected.append((s["key"], reason))
                 continue
-            #landmarks
-            self.lm_rows.append((s["key"], pts, reason))
 
             #pnp
             camera = s["camera"]
@@ -161,18 +154,21 @@ class Pipeline:
             #normailzed 
             warped, hr_norm, R, lm_warped = pnp.normalize_face( s["image"], self.face_model, pts, rvec, tvec, camera)
             #transform
-            gdir = R @ np.asarray(s["gaze_dir"], dtype=np.float64).reshape(3)
-            n = gdir / np.linalg.norm(gdir)
-            gaze2d = np.array([np.arcsin(-n[1]), np.arctan2(-n[0], -n[2])])
+            # gdir = R @ np.asarray(s["gaze_dir"], dtype=np.float64).reshape(3)
+            # n = gdir / np.linalg.norm(gdir)
+            # gaze2d = np.array([np.arcsin(-n[1]), np.arctan2(-n[0], -n[2])])
                     
-            M = cv2.Rodrigues(hr_norm.reshape(1, 3))[0]
-            Zv = M[:, 2]
-            head2d = np.array([np.arcsin(Zv[1]), np.arctan2(Zv[0], Zv[2])])
+            # M = cv2.Rodrigues(hr_norm.reshape(1, 3))[0]
+            # Zv = M[:, 2]
+            # head2d = np.array([np.arcsin(Zv[1]), np.arctan2(Zv[0], Zv[2])])
+            gdir = R @ np.asarray(s["gaze_dir"], dtype=np.float64).reshape(3)
+            gaze2d = pnp.gaze_to_2d(gdir)
+            head2d = pnp.head_to_2d(hr_norm)
             #write
-            self.writer.add(warped, gaze2d, head2d, R, lm_warped)
+            self.writer.add(warped, gaze2d, head2d, R, lm_warped,s["kwargs"])
 
             #viz
-            if self.need_viz and self.writer.n <= self.viz_n:
+            if self.need_viz and len(self.writer) <= self.viz_n:
                 o = viz.make_orig_tile(s["image"], pts, source.reshape(6, 2), reproj)
                 p = viz.make_face_tile(warped, lm_warped, gaze2d)
                 self.viz_rows.append((o, p))

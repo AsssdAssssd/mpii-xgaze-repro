@@ -5,7 +5,7 @@ import yaml
 
 from core.pipeline import Pipeline
 from dataset_struct import get_dataset
-
+from writer import get_writer
 CONFIG_DIR = Path(__file__).resolve().parent/"configs"
 
 
@@ -22,8 +22,8 @@ def main():
         cfg.setdefault(section, {})
 
     cfg["dataset"] = args.dataset_type
-
-    pipeline=Pipeline(cfg, get_dataset(cfg))
+    
+    pipeline=Pipeline(cfg, get_dataset(cfg),get_writer(cfg["dataset"]))
     pipeline.run()
 
 

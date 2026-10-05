@@ -47,4 +47,9 @@ class MPIIFaceGaze:
                 "camera": camera,
                 "distortion": distortion,
                 "gaze_dir": gt - fc,
+                "kwargs":{
+                    "subject":subj,
+                    "data":Path(short).parent.name,
+                    "index":Path(short).name
+                }
             }

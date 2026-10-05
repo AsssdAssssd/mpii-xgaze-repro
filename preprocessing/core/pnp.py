@@ -60,7 +60,7 @@ def normalize_face(image, face_model6, landmarks68, rvec, tvec, camera):
     right /= np.linalg.norm(right)
     R = np.c_[right, down, forward].T
 
-    W = np.dot(np.dot(cam_norm, S), np.dot(R, np.linalg.inv(camera)))
+    W = np.dot(cam_norm,np.dot(S, np.dot(R, np.linalg.inv(camera))))
     img_warped = cv2.warpPerspective(image, W, ROI)
 
     hR_norm = np.dot(R, hR)
@@ -71,3 +71,12 @@ def normalize_face(image, face_model6, landmarks68, rvec, tvec, camera):
 
     return img_warped, hr_norm, R, lm_warped
 
+def gaze_to_2d(gvec):
+    n = gvec / np.linalg.norm(gvec)
+    return np.array([np.arcsin(-n[1]), np.arctan2(-n[0], -n[2])])
+
+
+def head_to_2d(hr_norm):
+    M = cv2.Rodrigues(hr_norm.reshape(1, 3))[0]
+    Zv = M[:, 2]
+    return np.array([np.arcsin(Zv[1]), np.arctan2(Zv[0], Zv[2])])
