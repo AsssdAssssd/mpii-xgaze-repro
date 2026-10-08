@@ -234,13 +234,13 @@ class Trainer(object):
                 pred_gaze = self.model(input_var)
                 pred_gaze_all.append(pred_gaze.cpu().data.numpy())
                 self.predict_error.append(angular_error(pred_gaze.cpu().data.numpy(), label.cpu().data.numpy()))
-                keys.append(key)
+                keys.extend(key)
         else:
             for i, (key,input_img) in enumerate(self.test_loader):
                 input_var = torch.autograd.Variable(input_img.float().cuda())
                 pred_gaze = self.model(input_var)
                 pred_gaze_all.append(pred_gaze.cpu().data.numpy())
-                keys.append(key)
+                keys.extend(key)
 
         pred_gaze_all = np.concatenate(pred_gaze_all, axis=0)
         print('Tested on : ', pred_gaze_all.shape[0], ' samples')

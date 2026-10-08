@@ -46,7 +46,7 @@ class Pipeline:
         self.face_model = self.face_model_full[pnp.FM50_USE]
     
         self.filters_on = self.flt.get("enable", True)
-        self.max_reproj = self.flt.get("max_reproj", 0) or 0
+        # self.max_reproj = self.flt.get("max_reproj", 0) or 0
         self.skip_undistort = self.flt.get("skip_undistort", False)
         self.min_face = self.flt.get("min_face", 40)
         self.conf = self.flt.get("conf", 0.5)
@@ -141,9 +141,9 @@ class Pipeline:
             if rvec is None:
                 self.rejected.append((s["key"], "pnp_failed"))
                 continue
-            if self.filters_on and self.max_reproj and err > self.max_reproj:
-                self.rejected.append((s["key"], "reproj_too_big"))
-                continue
+            # if self.filters_on and self.max_reproj and err > self.max_reproj:
+            #     self.rejected.append((s["key"], "reproj_too_big"))
+            #     continue
             #viz mesh save
             if self.need_mesh:
                 mesh_path = self.dirs["rotated_mesh_vis"]/Path(s["key"]).with_suffix(".txt")

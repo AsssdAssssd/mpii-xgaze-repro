@@ -15,14 +15,16 @@ class Detecter:
 
     def detect_faces(self, images):
         """images: list of BGR arrays. Returns a list of (4,) boxes or None."""
-        rgb = [cv2.cvtColor(im, cv2.COLOR_BGR2RGB) for im in images]
-        boxes, probs = self.mtcnn.detect(rgb)#(X,1,4)
-        out = []
-        for b in boxes: # 每项是 (n,4) 或 None
-            if b is None or len(b) == 0:
-                out.append(None)
-            else:
-                out.append(np.asarray(b)[0, :4].astype(np.int32))
+        out = [None] * len(images)
+        groups = {}
+        for i, im in enumerate(images):
+            groups.setdefault(im.shape[:2], []).append(i) #按照shape分类index
+        for idxs in groups.values():
+            rgb = [cv2.cvtColor(images[i], cv2.COLOR_BGR2RGB) for i in idxs] #重组
+            boxes, _ = self.mtcnn.detect(rgb)
+            for i, b in zip(idxs, boxes):
+                if b is not None and len(b) > 0:
+                    out[i] = np.asarray(b)[0, :4].astype(np.int32)
         return out
 
 

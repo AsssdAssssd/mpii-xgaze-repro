@@ -7,9 +7,8 @@ paths:
   landmark_predictor: modules/shape_predictor_68_face_landmarks.dat
 
 filter:
-  enable: true           # false -> ignore min_face / max_reproj
+  enable: true           # false -> ignore min_face / 
   min_face: 40           # drop faces with bbox min side < this (px)
-  max_reproj: 8.0        # drop samples with PnP reprojection error > this (px)
   skip_undistort: true   # EVE ships no distortion model; must stay true
 
 options:
