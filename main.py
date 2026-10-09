@@ -109,8 +109,14 @@ def run(config,is_train):
             **kwargs)
 
         exp_root = config["experiment"]["root"].format(name=config["experiment"]["name"])
-        ckpt = str(Path(exp_root)/"train"/"weights"/"last_ckpt.pth.tar")
-        out_root = Path(exp_root)/"test"/f"{test_dir.name}_test_result"
+        weight = config["test"].get("weight")
+        weight_name = "last_ckpt.pth.tar" if weight is None else f"epoch_{weight}_ckpt.pth.tar"
+        ckpt = str(Path(exp_root)/"train"/"weights"/weight_name)
+        if not Path(ckpt).is_file():
+            raise FileNotFoundError(f"weight not found: {ckpt}")
+        tag = (f"{test_dir.name}_test_result" if weight is None
+               else f"{test_dir.name}_e{weight}_test_result")
+        out_root = Path(exp_root)/"test"/tag
 
         config["experiment"]["root"] = str(out_root)
         config["test"]["pre_trained_model_path"] = ckpt
@@ -167,9 +173,12 @@ def run_loo(config,is_train):
             trainer.set_val_loader(val_data_loaders[i])
             trainer.train()
 
-            
+            weight = config["test"].get("weight")
+            weight_name = "last_ckpt.pth.tar" if weight is None else f"epoch_{weight}_ckpt.pth.tar"
             config["test"]["pre_trained_model_path"] = str(
-                Path(config["experiment"]["root"])/"train"/"weights"/"last_ckpt.pth.tar")
+                Path(config["experiment"]["root"])/"train"/"weights"/weight_name)
+            if not Path(config["test"]["pre_trained_model_path"]).is_file():
+                            raise FileNotFoundError(f"weight not found: {ckpt}")
             tester = Trainer(config, test_data_loaders[i], False)
             tester.test(eval=True)
             error,error_std=tester.evaluation(False)
@@ -195,23 +204,21 @@ def run_loo(config,is_train):
 
         out_root = Path(ori_root)/"test"/f"{test_dir.name}_test_result"
         out_root.mkdir(parents=True, exist_ok=True)
-        trained_dir = sorted([i for i in (Path(ori_root)/"train").iterdir()
-                              if i.is_dir() and i.name=="full"])#现在只留下full
         eval_result={}
-        for i in trained_dir:
-            ckpt = i/"train"/"weights"/"last_ckpt.pth.tar"
-            if not ckpt.is_file():
-                print("[warn] no ckpt, skip:", ckpt)
-                continue
-            config["experiment"]["root"] = str(out_root/i.name)
-            config["test"]["pre_trained_model_path"] = str(ckpt)
-            (out_root/i.name/"test"/"output").mkdir(parents=True, exist_ok=True)
+        ckpt = Path(ori_root)/"train"/"full"/"train"/"weights"/"last_ckpt.pth.tar"
+        if not ckpt.is_file():
+            print("[error] no full ckpt :", ckpt)
+            return
+        
+        config["experiment"]["root"] = str(out_root)
+        config["test"]["pre_trained_model_path"] = str(ckpt)
+        (out_root/"test"/"output").mkdir(parents=True, exist_ok=True)
 
-            trainer = Trainer(config, data_loader, False)
-            trainer.test(eval=True)
-            error,error_std=trainer.evaluation(True)
-            eval_result[i.name] = (error, error_std)
-        process_loo_eval_results(eval_result,None,out_root,f"{test_dir.name}_eval_results")
+        trainer = Trainer(config, data_loader, False)
+        trainer.test(eval=True)
+        error,error_std=trainer.evaluation(True)
+        # eval_result[i.name] = (error, error_std)
+        # process_loo_eval_results(eval_result,None,out_root,f"{test_dir.name}_eval_results")
 
 
 if __name__ == '__main__':
@@ -223,6 +230,8 @@ if __name__ == '__main__':
     p.add_argument("--test_dataset", default=None, type=str)
     p.add_argument("--pretrained_expname", default=None, type=str)
     p.add_argument("--dataset_type",default=None,choices=['xgaze','eve','mpii'],type =str)
+    p.add_argument("--weight", default=None, type=int,
+                   help="epoch index for epoch_<n>_ckpt.pth.tar; default: last_ckpt.pth.tar")
     args = p.parse_args()
 
     if args.mode == "test":
@@ -253,6 +262,7 @@ if __name__ == '__main__':
         config["test"]["pretrained_expname"]=expname
         config["test"]["test_dataset"]=test_dataset
         config["test"]["dataset_type"]=dataset_type
+        config["test"]["weight"]=args.weight
         with open(out_root/"config.yaml", "w") as f:
             yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
     else:

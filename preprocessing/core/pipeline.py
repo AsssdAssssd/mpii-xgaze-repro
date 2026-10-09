@@ -1,16 +1,3 @@
-"""Shared detect -> PnP -> h5 pipeline.
-
-Any dataset adapter (see preprocessing/dataset_struct/) yields sample dicts:
-
-  {
-    "key":        "p00/day01/0005"      # used for output naming
-    "image":      (H,W,3) BGR uint8 array, or None if unreadable
-    "camera":     (3,3) matrix
-    "distortion": (n,1)
-    "gaze_dir":   (3,) target3d - person3d, camera coordinates
-  }
-
-"""
 
 import time
 from pathlib import Path
