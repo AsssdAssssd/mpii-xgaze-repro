@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 from pathlib import Path
 import time
+import csv
 import numpy as np
 
 from utils import AverageMeter, angular_error, HistorySaver
@@ -225,7 +226,7 @@ class Trainer(object):
         print('test')
         self.model.eval()
         self.load_checkpoint(is_strict=False, input_file_path=self.pre_trained_model_path)
-        pred_gaze_all,keys = [],[]
+        pred_gaze_all,keys,labels = [],[],[]
 
         print('Testing on ', self.num_test, ' samples')
         if eval:
@@ -234,6 +235,7 @@ class Trainer(object):
                 pred_gaze = self.model(input_var)
                 pred_gaze_all.append(pred_gaze.cpu().data.numpy())
                 self.predict_error.append(angular_error(pred_gaze.cpu().data.numpy(), label.cpu().data.numpy()))
+                labels.append(label.cpu().data.numpy())
                 keys.extend(key)
         else:
             for i, (key,input_img) in enumerate(self.test_loader):
@@ -245,11 +247,21 @@ class Trainer(object):
         pred_gaze_all = np.concatenate(pred_gaze_all, axis=0)
         print('Tested on : ', pred_gaze_all.shape[0], ' samples')
 
-        result_path = self.root/"test"/"output"/"test_results.txt"
-        with open(result_path, 'w') as f:
-            for key,(x,y) in zip(keys,pred_gaze_all):
-                f.write(f"{key}: {x} {y}\n")
-        print('save predictions to ', result_path)#这个应该封装到loader里面了，，，思考
+        if eval:
+            labels = np.concatenate(labels, axis=0)
+        result_path = self.root/"test"/"output"/"predictions.csv"
+        with open(result_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            if eval:
+                writer.writerow(["key", "pred_x", "pred_y", "gt_x", "gt_y"])
+                for key, (px, py), (gx, gy) in zip(keys, pred_gaze_all, labels):
+                    writer.writerow([key, px, py, gx, gy])
+            else:
+                writer.writerow(["key", "pred_x", "pred_y"])
+                for key, (px, py) in zip(keys, pred_gaze_all):
+                    writer.writerow([key, px, py])
+        print('save predictions to ', result_path)
+        
         self.logger.removeFilter(self.logger.handlers[0])
 
 
