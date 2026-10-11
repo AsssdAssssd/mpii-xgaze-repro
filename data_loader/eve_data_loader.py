@@ -8,10 +8,12 @@ import torch
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 
 from .xgaze_data_loader import trans
+from utils.datasetenhance import DatasetEnhancer
 
 CAMERA_FPS = {"basler": 60, "webcam_l": 30, "webcam_c": 30, "webcam_r": 30}
 CAMERAS = tuple(CAMERA_FPS)
 
+#光照数据增强：整体提高亮度（gamma？），以及模拟一些不均匀光照（比如相机过曝）一些光线or渐变
 
 class EveDataset(IterableDataset):
     def __init__(self, datasetpath, split=("train",), target_fps=5, image_size=224,
@@ -27,6 +29,8 @@ class EveDataset(IterableDataset):
         if not self.units:
             raise FileNotFoundError(
                 f"no EVE units under {self.root} for split={split}")
+        self.enhance_rate=0.6
+        self.dataset_enhancer=DatasetEnhancer(self.enhance_rate)
 
     def _scan(self, split):
         units = []
@@ -56,7 +60,7 @@ class EveDataset(IterableDataset):
         total = 0
         for h5_path, mp4_path in self.units:
             total += self._num_frames(h5_path) // self._stride(mp4_path)
-        return total
+        return int( total * (1 + self.enhance_rate))
 
     def __iter__(self):
         worker = get_worker_info()
@@ -118,6 +122,8 @@ class EveDataset(IterableDataset):
                     ok, frame = cap.retrieve()
                     if ok and frame is not None:
                         samples.append((i, frame))
+                        if self.dataset_enhancer.whether_enhance():
+                            samples.append((i,self.dataset_enhancer.image_light_enhance(frame)))
                 i += 1
         finally:
             cap.release()
