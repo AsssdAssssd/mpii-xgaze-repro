@@ -17,21 +17,30 @@ from .mpii_data_loader import (
     get_test_loader as _mpii_test_loader,
     get_loo_loader
 )
+from .eveh5_data_loader import (
+    EVEH5Dataset,
+    get_train_loader as _eveh5_train_loader,
+    get_val_loader as _eveh5_val_loader,
+    get_test_loader as _eveh5_test_loader,
+)
 
 _TRAIN_LOADERS = {
     "xgaze": _xgaze_train_loader,
     "eve": _eve_train_loader,
     "mpii": _mpii_train_loader,
+    "eveh5": _eveh5_train_loader,
 }
 _VAL_LOADERS = {
     "xgaze": _xgaze_val_loader,
     "eve": _eve_val_loader,
     "mpii": _mpii_val_loader,
+    "eveh5": _eveh5_val_loader,
 }
 _TEST_LOADERS = {
     "xgaze": _xgaze_test_loader,
     "eve": _eve_test_loader,
     "mpii": _mpii_test_loader,
+    "eveh5": _eveh5_test_loader,
 }
 
 

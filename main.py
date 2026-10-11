@@ -229,7 +229,7 @@ if __name__ == '__main__':
     #test的三个参数：CLI直传/config/dataset_typr
     p.add_argument("--test_dataset", default=None, type=str)
     p.add_argument("--pretrained_expname", default=None, type=str)
-    p.add_argument("--dataset_type",default=None,choices=['xgaze','eve','mpii'],type =str)
+    p.add_argument("--dataset_type",default=None,choices=['xgaze','eve','mpii','eveh5'],type =str)
     p.add_argument("--weight", default=None, type=int,
                    help="epoch index for epoch_<n>_ckpt.pth.tar; default: last_ckpt.pth.tar")
     args = p.parse_args()

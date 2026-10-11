@@ -1,0 +1,161 @@
+import numpy as np
+import h5py
+import torch
+from torchvision import transforms
+from torch.utils.data import Dataset, DataLoader
+from pathlib import Path
+import json
+import random
+from typing import List
+from utils.datasetenhance import DatasetEnhancer
+
+trans_train = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.ToTensor(),  # this also convert pixel value from [0,255] to [0,1]
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
+    ])
+
+trans = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.ToTensor(),  # this also convert pixel value from [0,255] to [0,1]
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
+    ])
+
+
+def _list_h5(data_dir, sub_folder):
+    return sorted(p.name for p in (Path(data_dir)/sub_folder).glob("*.h5"))
+
+
+def get_train_loader(data_dir,
+                           batch_size,
+                           num_workers=4,
+                           is_shuffle=True):
+    sub_folder_use = 'train'
+    train_set = EVEH5Dataset(dataset_path=data_dir, keys_to_use=_list_h5(data_dir, sub_folder_use),
+                            sub_folder=sub_folder_use, transform=trans, is_shuffle=is_shuffle, is_load_label=True)
+    train_loader = DataLoader(train_set, batch_size=batch_size, num_workers=num_workers)
+
+    return train_loader
+
+def get_val_loader(data_dir,
+                           batch_size,
+                           num_workers=4,
+                           is_shuffle=True):
+    sub_folder_use = 'test'
+    val_set = EVEH5Dataset(dataset_path=data_dir, keys_to_use=_list_h5(data_dir, sub_folder_use),
+                          sub_folder=sub_folder_use, transform=trans, is_shuffle=is_shuffle, is_load_label=True)
+    val_loader = DataLoader(val_set, batch_size=batch_size, num_workers=num_workers)
+
+    return val_loader
+
+
+def get_test_loader(data_dir,
+                           batch_size,
+                           num_workers=4,
+                           is_shuffle=True,load_label=False):
+    sub_folder_use = 'test'   # 该数据集没有单独 test 目录，用 val
+    test_set = EVEH5Dataset(dataset_path=data_dir, keys_to_use=_list_h5(data_dir, sub_folder_use),
+                           sub_folder=sub_folder_use, transform=trans, is_shuffle=is_shuffle, is_load_label=load_label)
+    test_loader = DataLoader(test_set, batch_size=batch_size, num_workers=num_workers)
+
+    return test_loader
+
+
+class EVEH5Dataset(Dataset):
+    def __init__(self, dataset_path: str, keys_to_use: List[str] = None, sub_folder='', transform=None, is_shuffle=True,
+                 index_file=None, is_load_label=True):
+        self.path = dataset_path
+        self.hdfs = {}
+        self.sub_folder = sub_folder
+        self.is_load_label = is_load_label
+
+        # assert len(set(keys_to_use) - set(all_keys)) == 0
+        # Select keys
+        # TODO: select only people with sufficient entries?
+        self.selected_keys = [k for k in keys_to_use]
+        assert len(self.selected_keys) > 0
+
+        for num_i in range(0, len(self.selected_keys)):
+            file_path =Path(self.path)/self.sub_folder/ self.selected_keys[num_i]
+            self.hdfs[num_i] = h5py.File(file_path, 'r', swmr=True)
+            assert self.hdfs[num_i].swmr_mode
+        self.enhance_rate=1.0
+        self.enhancer=DatasetEnhancer(self.enhance_rate)
+
+        # Construct mapping from full-data index to key and person-specific index
+
+        self.idx_to_kv = []
+        for num_i in range(0, len(self.selected_keys)):
+            n = self.hdfs[num_i]["face_patch"].shape[0]
+            self.idx_to_kv += [(num_i, i) for i in range(n)]
+        self.items=[(kv,False)for kv in self.idx_to_kv]
+        n=len(self.items)
+        n_extra=int(n*self.enhance_rate)
+        for i in random.sample(range(n),n_extra):
+            self.items.append((self.idx_to_kv[i],False))
+
+            
+
+
+        for num_i in range(0, len(self.hdfs)):
+            if self.hdfs[num_i]:
+                self.hdfs[num_i].close()
+                self.hdfs[num_i] = None
+
+        if is_shuffle:
+            random.shuffle(self.idx_to_kv)  # random the order to stable the training
+
+        self.hdf = None
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.items)
+
+    def __del__(self):
+        for num_i in range(0, len(self.hdfs)):
+            if self.hdfs[num_i]:
+                self.hdfs[num_i].close()
+                self.hdfs[num_i] = None
+
+    def __getitem__(self, idx):
+        kv ,enhance = self.items[idx]
+        sub_idx, idx =kv
+        self.hdf = h5py.File(Path(self.path)/self.sub_folder/self.selected_keys[sub_idx], 'r', swmr=True)
+        assert self.hdf.swmr_mode
+
+        # Get face image
+        image = self.hdf['face_patch'][idx, :]
+        if enhance:
+            image=self.dataenhance.image_light_enhance(image)
+        image = image[:, :, [2, 1, 0]]  # from BGR to RGB
+        image = self.transform(image)
+
+        subj=Path(self.selected_keys[sub_idx]).stem
+        step=int(self.hdf['step_index'][idx])
+        index=int(self.hdf['frame_index'][idx])
+        camera=int(self.hdf['cam_index'][idx])
+        key=f"{subj}/{step}/{camera}/{index}"
+
+
+        # Get labels
+        if self.is_load_label:
+            gaze_label = self.hdf['face_gaze'][idx, :]
+            gaze_label = gaze_label.astype('float')
+            return key,image, gaze_label
+        else:
+            return key,image
+
+    def get_labels_keyed(self):
+        # eval用：从源h5里读face_gaze，{key: (n,2)}，行序与h5原生顺序一致
+        labels = {}
+        for key in self.selected_keys:
+            hdf = h5py.File(Path(self.path)/self.sub_folder/key, 'r', swmr=True)
+            labels[key] = np.asarray(hdf['face_gaze'][:], dtype=np.float64)
+            hdf.close()
+        return labels
+
+
+
+

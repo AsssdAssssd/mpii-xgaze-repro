@@ -9,10 +9,10 @@ class DatasetEnhancer:
         self.gamma_range=0.2
         self.wb_range=0.3
         self.exposure_ev_range=[-2.0,0.5] #EV
-        self.p_exposure=0.8
+        self.p_exposure=1.0
         self.p_gamma=0.5
-        self.p_directional_gradient = 0.5
-        self.p_wb = 0.5
+        self.p_directional_gradient = 0.6
+        self.p_wb = 0.6
         self.grad_map = 0.8 #斜着光线最大增益
 
 

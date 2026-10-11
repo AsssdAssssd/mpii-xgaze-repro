@@ -67,7 +67,7 @@ class Trainer(object):
 
         # build model
         self.model = gaze_network(backbone=config["train"]["backbone"])
-        self.model.cuda()
+        self.model= torch.nn.DataParallel(self.model).cuda()
 
         print('[*] Number of model parameters: {:,}'.format(
             sum([p.data.nelement() for p in self.model.parameters()])))
