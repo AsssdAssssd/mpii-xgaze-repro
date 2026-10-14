@@ -161,15 +161,18 @@ class MPIIDataset(Dataset):
         
 
         # Construct mapping from full-data index to key and person-specific index
-        if index_file is None:
-            self.idx_to_kv = []
-            for num_i in range(0, len(self.selected_keys)):
-                n = self.hdfs[num_i]["face_patch"].shape[0]
-                self.idx_to_kv += [(num_i, i) for i in range(n)]
-        else:
-            print('load the file: ', index_file)
-            self.idx_to_kv = np.loadtxt(index_file, dtype=int)
 
+        self.idx_to_kv = []
+        for num_i in range(0, len(self.selected_keys)):
+            n = self.hdfs[num_i]["face_patch"].shape[0]
+            self.idx_to_kv += [(num_i, i) for i in range(n)]
+        self.items=[(kv,False)for kv in self.idx_to_kv]
+        n=len(self.items)
+        n_extra=int(n*self.enhance_rate)
+        for i in random.sample(range(n),n_extra):
+            self.items.append((self.idx_to_kv[i],False))
+
+            
         for num_i in range(0, len(self.hdfs)):
             if self.hdfs[num_i]:
                 self.hdfs[num_i].close()
@@ -182,7 +185,7 @@ class MPIIDataset(Dataset):
         self.transform = transform
 
     def __len__(self):
-        return len(self.idx_to_kv)
+        return len(self.items)
 
     def __del__(self):
         for num_i in range(0, len(self.hdfs)):
@@ -191,13 +194,16 @@ class MPIIDataset(Dataset):
                 self.hdfs[num_i] = None
 
     def __getitem__(self, idx):
-        sub_idx, idx = self.idx_to_kv[idx]
+        kv ,enhance = self.items[idx]
+        sub_idx, idx =kv
 
         self.hdf = h5py.File(Path(self.path)/self.sub_folder/self.selected_keys[sub_idx], 'r', swmr=True)
         assert self.hdf.swmr_mode
 
         # Get face image
         image = self.hdf['face_patch'][idx, :]
+        if enhance:
+            image=self.dataenhance.image_light_enhance(image)
         image = image[:, :, [2, 1, 0]]  # from BGR to RGB
         image = self.transform(image)
 

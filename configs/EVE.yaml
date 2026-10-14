@@ -1,7 +1,7 @@
 experiment:
-  name: EVE
+  name: EVE_light_enhance
   root: ./exp/{name}
-  data_dir: "/media/yanglinxuan/sfm/eve_noroll_224"
+  data_dir: "/media/yanglinxuan/sfm/eve_insightface_224"
   batch_size: 256
   num_workers: 5
   dataset_type : eveh5
@@ -9,7 +9,7 @@ experiment:
 train:
   backbone: resnet50 #'resnet18''resnet34''resnet50''resnet101''resnet152''resnext50_32x4d' 'resnext101_32x8d''wide_resnet50_2''wide_resnet101_2':
   print_freq: 1000
-  epochs: 25
+  epochs: 15
   init_lr: 0.0001
   lr_patience: 10
   lr_decay_factor: 0.1

@@ -8,6 +8,7 @@ from pathlib import Path
 import time
 import csv
 import numpy as np
+import tqdm
 
 from utils import AverageMeter, angular_error, HistorySaver
 from model import gaze_network
@@ -165,7 +166,15 @@ class Trainer(object):
         epoch_losses = AverageMeter()
 
         tic = time.time()
-        for i, (key,input_img, target) in enumerate(data_loader):
+        progress_bar = tqdm.tqdm(
+            enumerate(data_loader), 
+            desc=f"Epoch {epoch}", 
+            unit="batch", 
+            dynamic_ncols=True, 
+            disable=False, 
+            ascii=True
+        )
+        for i, (_, input_img, target) in progress_bar:
             input_var = torch.autograd.Variable(input_img.float().cuda())
             target_var = torch.autograd.Variable(target.float().cuda())
 

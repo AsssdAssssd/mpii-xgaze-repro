@@ -1,7 +1,7 @@
 experiment:
   name: EVE_resnet18_light_enhance
   root: ./exp/{name}
-  data_dir: "/media/yanglinxuan/sfm/eve_noroll_224"
+  data_dir: "/media/yanglinxuan/sfm/eve_insightface_224"
   batch_size: 256
   num_workers: 5
   dataset_type : eveh5

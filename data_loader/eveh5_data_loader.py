@@ -25,7 +25,7 @@ trans = transforms.Compose([
 
 
 def _list_h5(data_dir, sub_folder):
-    return sorted(p.name for p in (Path(data_dir)/sub_folder).glob("*.h5"))
+    return sorted(p for p in (Path(data_dir) / sub_folder).glob("*.h5"))
 
 
 def get_train_loader(data_dir,
@@ -77,35 +77,40 @@ class EVEH5Dataset(Dataset):
         self.selected_keys = [k for k in keys_to_use]
         assert len(self.selected_keys) > 0
 
-        for num_i in range(0, len(self.selected_keys)):
-            file_path =Path(self.path)/self.sub_folder/ self.selected_keys[num_i]
-            self.hdfs[num_i] = h5py.File(file_path, 'r', swmr=True)
-            assert self.hdfs[num_i].swmr_mode
+        for subject_idx in range(0, len(self.selected_keys)):
+            self.hdfs[subject_idx] = h5py.File(self.selected_keys[subject_idx], 'r', swmr=True)
+            assert self.hdfs[subject_idx].swmr_mode
         self.enhance_rate=1.0
         self.enhancer=DatasetEnhancer(self.enhance_rate)
 
         # Construct mapping from full-data index to key and person-specific index
 
-        self.idx_to_kv = []
-        for num_i in range(0, len(self.selected_keys)):
-            n = self.hdfs[num_i]["face_patch"].shape[0]
-            self.idx_to_kv += [(num_i, i) for i in range(n)]
-        self.items=[(kv,False)for kv in self.idx_to_kv]
-        n=len(self.items)
-        n_extra=int(n*self.enhance_rate)
-        for i in random.sample(range(n),n_extra):
-            self.items.append((self.idx_to_kv[i],False))
+        self.items = []
 
-            
+        for subject_idx in range(0, len(self.selected_keys)):
+            n = self.hdfs[subject_idx]["face_patch"].shape[0]
+            self.items += [
+                {
+                    "subject_idx": subject_idx, 
+                    "frame_idx": i, 
+                    "is_enhanced": False
+                }
+            for i in range(n)]
 
+        num_enhanced = int(len(self.hdfs) * self.enhance_rate)
 
-        for num_i in range(0, len(self.hdfs)):
-            if self.hdfs[num_i]:
-                self.hdfs[num_i].close()
-                self.hdfs[num_i] = None
+        for i in random.sample(range(n), num_enhanced):
+            item = self.items[i]
+            self.items.append(
+                {
+                    "subject_idx": item["subject_idx"], 
+                    "frame_idx": item["frame_idx"], 
+                    "is_enhanced": True
+                }
+            )
 
         if is_shuffle:
-            random.shuffle(self.idx_to_kv)  # random the order to stable the training
+            random.shuffle(self.items)  # random the order to stable the training
 
         self.hdf = None
         self.transform = transform
@@ -119,32 +124,32 @@ class EVEH5Dataset(Dataset):
                 self.hdfs[num_i].close()
                 self.hdfs[num_i] = None
 
-    def __getitem__(self, idx):
-        kv ,enhance = self.items[idx]
-        sub_idx, idx =kv
-        self.hdf = h5py.File(Path(self.path)/self.sub_folder/self.selected_keys[sub_idx], 'r', swmr=True)
+    def __getitem__(self, global_idx):
+        item = self.items[global_idx]
+        idx = item["frame_idx"]
+        self.hdf = h5py.File(self.selected_keys[item["subject_idx"]])
         assert self.hdf.swmr_mode
 
         # Get face image
         image = self.hdf['face_patch'][idx, :]
-        if enhance:
-            image=self.dataenhance.image_light_enhance(image)
+        if item["is_enhanced"]:
+            image=self.enhancer.image_light_enhance(image)
         image = image[:, :, [2, 1, 0]]  # from BGR to RGB
         image = self.transform(image)
 
-        subj=Path(self.selected_keys[sub_idx]).stem
-        step=int(self.hdf['step_index'][idx])
-        index=int(self.hdf['frame_index'][idx])
-        camera=int(self.hdf['cam_index'][idx])
-        key=f"{subj}/{step}/{camera}/{index}"
-
+        step = self.hdf['step_index'][idx].item()
+        index = self.hdf['frame_index'][idx].item()
+        camera = self.hdf['cam_index'][idx].item()
+        key=f"{item["subject_idx"]}/{step}/{camera}/{index}"
 
         # Get labels
         if self.is_load_label:
             gaze_label = self.hdf['face_gaze'][idx, :]
             gaze_label = gaze_label.astype('float')
+            self.hdf.close()
             return key,image, gaze_label
         else:
+            self.hdf.close()
             return key,image
 
     def get_labels_keyed(self):
